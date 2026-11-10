@@ -232,13 +232,13 @@
   <!-- DATA LOADER -->
   <section class="card">
     <h2>1 · Data <span class="tag">preloaded or your CSV</span></h2>
-    <p class="sub">BTCUSDT hourly bars (Binance public data) load by default. You can also load any OHLC export from MetaTrader 5 or another source; files are read in your browser and never uploaded.</p>
+    <p class="sub">BTCUSD perpetual hourly bars from Binance (2021–2024) load by default. You can also load any OHLC export from MetaTrader 5 or another source; files are read in your browser and never uploaded.</p>
     <div class="loader" style="margin-top:14px">
       <div class="drop" id="drop">
         <div class="big">Drop a CSV here (MT5 export or OHLC)</div>
         <div class="small">or pick a file · .csv / .txt / .tsv</div>
         <div class="btn-row">
-          <button class="btn primary" id="btcBtn">BTCUSDT H1 · Binance</button>
+          <button class="btn primary" id="btcBtn">BTCUSD H1 · Binance</button>
           <button class="btn" id="pickBtn">Load your CSV</button>
           <button class="btn ghost" id="sampleBtn">Synthetic example</button>
         </div>
@@ -359,7 +359,7 @@
 
     <section class="card" id="wfCard">
       <h2>Walk-forward · out-of-sample <span class="tag">the anti-self-deception test</span></h2>
-      <p class="sub">The panel <b>optimises only</b> the strategy's own parameters on the <i>in-sample</i> period and applies them, unchanged, to the period it <b>never saw</b> (<i>out-of-sample</i>). By default the out-of-sample starts on <b>1 January 2026</b> (sealed holdout). It measures what matters: whether, out of sample, the strategy passes or breaches.</p>
+      <p class="sub">The panel <b>optimises only</b> the strategy's own parameters on the <i>in-sample</i> period and applies them, unchanged, to the period it <b>never saw</b> (<i>out-of-sample</i>). With the preloaded data the out-of-sample starts on <b>1 January 2024</b> (sealed holdout); the date is editable. It measures what matters: whether, out of sample, the strategy passes or breaches.</p>
       <div class="roll-ctrls" style="grid-template-columns:repeat(4,minmax(0,1fr))">
         <div class="field">
           <label>Mode</label>
@@ -1842,13 +1842,14 @@
   $("pickBtn").onclick=()=>$("file").click();
   $("file").onchange=e=>{ if(e.target.files[0]) handleFile(e.target.files[0]); };
   $("sampleBtn").onclick=()=>loadBars(makeSample(),true);
-  // Preloaded data: BTCUSDT hourly bars from Binance public data (data.binance.vision), UTC.
+  // Preloaded data: BTCUSD coin-margined perpetual, hourly bars from Binance, UTC, 2021-2024.
   async function loadPreloaded(){
-    status.className="status"; status.textContent="Loading BTCUSDT H1 (Binance public data)…";
+    status.className="status"; status.textContent="Loading BTCUSD H1 (Binance)…";
     try{
-      const res=await fetch("data/BTCUSDT_H1.csv"); if(!res.ok) throw new Error("HTTP "+res.status);
+      const res=await fetch("data/BTCUSD_H1.csv"); if(!res.ok) throw new Error("HTTP "+res.status);
       const text=await res.text(); const bars=parseCSV(text);
-      loadBars(bars,false,{name:"BTCUSDT", spread:spreadFromText(text), source:"Binance public data, UTC"});
+      P.c.isFrom="2021-01-01"; P.c.oosFrom="2024-01-01"; $("wf_oos").value="2024-01-01";
+      loadBars(bars,false,{name:"BTCUSD", spread:spreadFromText(text), source:"Binance BTCUSD perpetual, UTC"});
     }catch(err){ status.className="status err"; status.textContent="✕ Could not load the preloaded data ("+err.message+"). Showing the synthetic example."; loadBars(makeSample(),true); }
   }
   $("btcBtn").onclick=loadPreloaded;

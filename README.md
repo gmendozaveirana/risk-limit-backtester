@@ -4,7 +4,7 @@
 
 A browser-based backtester that asks a narrower question than "is this strategy profitable?": **does it survive hard risk limits?** It simulates a fresh account on many start dates and counts how often a systematic strategy reaches a profit target before breaching a daily-loss limit or a maximum drawdown. It also tests whether the edge is real or only market beta.
 
-It runs entirely in the browser, with no server and no build step. BTCUSDT hourly data (Binance public data) is preloaded. Any other OHLC CSV, such as a MetaTrader 5 export, can be loaded locally; files never leave the browser.
+It runs entirely in the browser, with no server and no build step. BTCUSD perpetual hourly data from Binance (2021–2024) is preloaded; with it, 2021–2023 is in-sample and 2024 is the sealed out-of-sample. Any other OHLC CSV, such as a MetaTrader 5 export, can be loaded locally; files never leave the browser.
 
 ![Screenshot](figures/screenshot.png)
 
@@ -43,7 +43,7 @@ Every strategy supports long, short or both directions; shorts are the exact mir
 
 ## Data
 
-- `data/BTCUSDT_H1.csv`: BTCUSDT 1-hour klines from [Binance public data](https://data.binance.vision), UTC, converted with `tools/prepare_btc.py`.
+- `data/BTCUSD_H1.csv`: Binance BTCUSD coin-margined perpetual, 1-hour bars, 2021-01-01 → 2024-12-31, UTC, converted with `tools/prepare_btc.py`.
 - Index data used in the author's own research is not redistributed. Load your own export to test indices.
 
 ## Run locally
