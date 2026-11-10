@@ -1,0 +1,1947 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Risk-Limit Survival Backtester</title>
+<meta name="description" content="Backtest systematic strategies against hard risk limits (daily loss, max drawdown, profit target) with walk-forward, Monte Carlo and statistical-edge tests.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root{
+    color-scheme: dark;
+    --bg:#0b0f14;
+    --surface:#131a22;
+    --surface-2:#1a222c;
+    --surface-3:#212b37;
+    --border:#2a3543;
+    --border-soft:#212b37;
+    --ink:#e7eef6;
+    --ink-muted:#98a6b5;
+    --ink-faint:#65727f;
+    --accent:#d8a24a;
+    --accent-soft:rgba(216,162,74,.14);
+    --good:#3fb950;
+    --good-soft:rgba(63,185,80,.14);
+    --bad:#f05a52;
+    --bad-soft:rgba(240,90,82,.14);
+    --warn:#e0a021;
+    --fail-dd:#7d1712;
+    --fail-dd-line:#d9473f;
+    --equity:#4c9dff;
+    --equity-soft:rgba(76,157,255,.16);
+    --sans:"IBM Plex Sans",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+    --r:12px;
+    --r-sm:8px;
+  }
+  *{box-sizing:border-box}
+  body{background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.5;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1100px;margin:0 auto;padding-block:26px;padding-left:18px;padding-right:18px}
+  h1,h2,h3{margin:0;text-wrap:balance;font-weight:600}
+  a{color:var(--equity)}
+  .mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+  .tnum{font-variant-numeric:tabular-nums}
+
+  /* Header */
+  header.top{display:flex;flex-wrap:wrap;gap:14px 20px;align-items:flex-end;justify-content:space-between;border-bottom:1px solid var(--border);padding-bottom:18px;margin-bottom:22px}
+  .brand{display:flex;flex-direction:column;gap:6px}
+  .brand .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent)}
+  .brand h1{font-size:25px;letter-spacing:-.01em}
+  .brand p{margin:2px 0 0;color:var(--ink-muted);font-size:13px;max-width:52ch}
+  .chips{display:flex;flex-wrap:wrap;gap:8px}
+  .chip{display:inline-flex;align-items:center;gap:6px;background:var(--surface-2);border:1px solid var(--border);border-radius:999px;padding:5px 11px;font-family:var(--mono);font-size:12px;color:var(--ink-muted)}
+  .chip b{color:var(--ink);font-weight:600}
+
+  .card{background:var(--surface);border:1px solid var(--border-soft);border-radius:var(--r);padding:18px}
+  .card + .card{margin-top:18px}
+  .card h2{font-size:14px;letter-spacing:.02em;display:flex;align-items:center;gap:9px;margin-bottom:4px}
+  .card h2 .tag{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);border:1px solid var(--border);border-radius:5px;padding:2px 6px;font-weight:500}
+  .sub{color:var(--ink-muted);font-size:12.5px;margin:2px 0 0}
+
+  /* Data loader */
+  .loader{display:grid;grid-template-columns:1.1fr 1fr;gap:18px;align-items:stretch}
+  .drop{border:1.5px dashed var(--border);border-radius:var(--r-sm);background:var(--surface-2);padding:22px;display:flex;flex-direction:column;justify-content:center;gap:12px;text-align:center;transition:border-color .15s,background .15s}
+  .drop.drag{border-color:var(--accent);background:var(--accent-soft)}
+  .drop .big{font-size:14px;font-weight:600}
+  .drop .small{font-size:12px;color:var(--ink-muted)}
+  .btn{appearance:none;border:1px solid var(--border);background:var(--surface-3);color:var(--ink);font-family:var(--sans);font-weight:600;font-size:13px;border-radius:var(--r-sm);padding:10px 16px;cursor:pointer;transition:.15s}
+  .btn:hover{border-color:var(--accent);color:#fff}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#1a1204}
+  .btn.primary:hover{filter:brightness(1.06);color:#1a1204}
+  .btn.ghost{background:transparent}
+  .btn-row{display:flex;flex-wrap:wrap;gap:9px;justify-content:center}
+  .howto{background:var(--surface-2);border:1px solid var(--border-soft);border-radius:var(--r-sm);padding:15px 16px}
+  .howto h3{font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--accent);margin-bottom:9px;font-family:var(--mono)}
+  .howto ol{margin:0;padding-left:18px;font-size:12.5px;color:var(--ink-muted)}
+  .howto ol li{margin:5px 0}
+  .howto kbd{font-family:var(--mono);background:var(--surface-3);border:1px solid var(--border);border-radius:4px;padding:1px 5px;font-size:11px;color:var(--ink)}
+  .status{margin-top:12px;font-size:12.5px;font-family:var(--mono);color:var(--ink-muted);min-height:18px}
+  .status.ok{color:var(--good)}
+  .status.err{color:var(--bad)}
+  .window-tag{display:none;margin-top:14px;background:var(--surface-2);border:1px solid var(--border);border-left:3px solid var(--equity);border-radius:var(--r-sm);padding:11px 14px;font-size:13px}
+  .window-tag.sample{border-left-color:var(--warn)}
+  .window-tag .lbl{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--ink-faint);display:block;margin-bottom:3px}
+
+  /* Controls */
+  .ctrl-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px 20px;margin-top:14px}
+  .ctrl-group{grid-column:span 4;border-top:1px solid var(--border-soft);padding-top:12px;margin-top:2px}
+  .ctrl-group:first-child{border-top:none;padding-top:0;margin-top:0}
+  .ctrl-group .gh{font-family:var(--mono);font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:12px}
+  .field{display:flex;flex-direction:column;gap:6px}
+  .field label{font-size:11.5px;color:var(--ink-muted);display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+  .field label .val{font-family:var(--mono);color:var(--accent);font-weight:600;font-size:12px}
+  .field input[type=range]{width:100%;accent-color:var(--accent);height:4px}
+  .field input[type=number],.field input[type=date],.field select{width:100%;background:var(--surface-2);border:1px solid var(--border);color:var(--ink);border-radius:6px;padding:7px 9px;font-family:var(--mono);font-size:12.5px}
+  .field.wide{grid-column:span 2}
+  .toggle{display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--ink);cursor:pointer;user-select:none;padding-top:4px}
+  .toggle input{width:16px;height:16px;accent-color:var(--accent)}
+
+  #results[hidden]{display:none}
+  .muted-note{font-size:11.5px;color:var(--ink-faint);margin-top:10px}
+
+  /* Verdict */
+  .verdict{border-radius:var(--r);padding:20px 22px;border:1.5px solid var(--border);background:var(--surface);display:grid;grid-template-columns:auto 1fr;gap:20px;align-items:center}
+  .verdict.pass{border-color:var(--good);background:linear-gradient(180deg,var(--good-soft),transparent 70%)}
+  .verdict.fail{border-color:var(--bad);background:linear-gradient(180deg,var(--bad-soft),transparent 70%)}
+  .verdict .icon{width:62px;height:62px;border-radius:50%;display:grid;place-items:center;font-size:32px;flex:none}
+  .verdict.pass .icon{background:var(--good-soft);color:var(--good)}
+  .verdict.fail .icon{background:var(--bad-soft);color:var(--bad)}
+  .verdict .vtitle{font-size:19px;font-weight:700;letter-spacing:-.01em}
+  .verdict.pass .vtitle{color:var(--good)}
+  .verdict.fail .vtitle{color:var(--bad)}
+  .verdict .vdesc{font-size:13px;color:var(--ink-muted);margin-top:3px;max-width:60ch}
+  .verdict .vdate{font-family:var(--mono);font-size:12px;color:var(--ink);margin-top:6px}
+
+  .bars{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:16px}
+  .prog{background:var(--surface-2);border:1px solid var(--border-soft);border-radius:var(--r-sm);padding:13px 15px}
+  .prog .ph{display:flex;justify-content:space-between;font-size:11.5px;color:var(--ink-muted);margin-bottom:8px}
+  .prog .ph b{font-family:var(--mono);color:var(--ink);font-weight:600}
+  .track{height:9px;background:var(--surface-3);border-radius:999px;overflow:hidden}
+  .track .fill{height:100%;border-radius:999px;transition:width .3s}
+  .fill.g{background:var(--good)}
+  .fill.r{background:var(--bad)}
+  .fill.a{background:var(--accent)}
+
+  /* Metrics */
+  .tiles{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-top:16px}
+  .tile{background:var(--surface-2);border:1px solid var(--border-soft);border-radius:var(--r-sm);padding:13px 14px;display:flex;flex-direction:column;gap:3px}
+  .tile .t-lbl{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-faint);font-family:var(--mono)}
+  .tile .t-val{font-family:var(--mono);font-size:19px;font-weight:600;letter-spacing:-.01em}
+  .tile .t-val.pos{color:var(--good)}
+  .tile .t-val.neg{color:var(--bad)}
+  .tile .t-val.dd{color:var(--fail-dd-line);text-decoration:underline wavy var(--fail-dd-line) 1px;text-underline-offset:5px}
+
+  .ofit{margin-top:6px;border:1px solid var(--border);border-left-width:5px;border-radius:var(--r-sm);padding:12px 15px;font-size:12.5px;color:var(--ink-muted);background:var(--surface-2)}
+  .ofit b.lvl{display:inline-block;font-family:var(--mono);font-size:12px;letter-spacing:.08em;padding:2px 8px;border-radius:5px;margin-right:8px;color:#0b0f14}
+  .ofit.hi{border-left-color:var(--fail-dd-line)} .ofit.hi b.lvl{background:var(--fail-dd-line);color:#fff}
+  .ofit.mid{border-left-color:var(--warn)} .ofit.mid b.lvl{background:var(--warn)}
+  .ofit.lo{border-left-color:var(--good)} .ofit.lo b.lvl{background:var(--good)}
+  .ofit ul{margin:4px 0 0;padding-left:0;list-style:none} .ofit li{margin:3px 0}
+  .ofit-h{margin-top:10px;font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-faint)}
+  .ofit li .pos{color:var(--good);font-weight:700} .ofit li .neg{color:var(--fail-dd-line);font-weight:700}
+  .section-sep{margin:28px 2px 12px;font-size:12.5px;color:var(--ink-muted);border-top:1px solid var(--border);padding-top:16px}
+  .section-sep span{display:block;font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:4px}
+  table.pnl tr.cur td{background:var(--accent-soft)}
+  /* Strategy selector */
+  .strat-top{display:flex;flex-wrap:wrap;gap:14px 24px;align-items:flex-end;margin:14px 0 12px}
+  .strat-note{font-size:12.5px;color:var(--ink-muted);background:var(--surface-2);border:1px solid var(--border-soft);border-left:3px solid var(--accent);border-radius:var(--r-sm);padding:11px 14px;margin-bottom:6px;line-height:1.55}
+  .strat-note b{color:var(--ink)}
+  .note-warn{margin-top:8px;color:var(--warn)}
+  .note-ok{margin-top:8px;color:var(--good)}
+  .ctrl-fields{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px 20px}
+  @media (max-width:820px){ .ctrl-fields{grid-template-columns:repeat(2,minmax(0,1fr))} }
+  @media (max-width:480px){ .ctrl-fields{grid-template-columns:1fr} }
+
+  /* Rolling robustness */
+  .roll-ctrls{display:grid;grid-template-columns:1fr 1fr;gap:16px 22px;margin:14px 0 6px}
+  .rate{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin:14px 0 4px;padding:14px 16px;background:var(--surface-2);border:1px solid var(--border-soft);border-radius:var(--r-sm)}
+  .rate .big{font-family:var(--mono);font-size:34px;font-weight:600;letter-spacing:-.02em;line-height:1}
+  .rate .big.g{color:var(--good)} .rate .big.w{color:var(--warn)} .rate .big.r{color:var(--bad)}
+  .rate .lbl{font-size:13px;color:var(--ink-muted)}
+  .rate .lbl b{color:var(--ink)}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;margin-top:10px;font-size:12px;color:var(--ink-muted)}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .legend i{width:11px;height:11px;border-radius:3px;display:inline-block}
+
+  /* Checklist */
+  .check{display:flex;flex-direction:column;gap:2px;margin-top:6px}
+  .check .row{display:flex;align-items:center;gap:11px;padding:9px 2px;border-bottom:1px solid var(--border-soft);font-size:13px}
+  .check .row:last-child{border-bottom:none}
+  .check .mk{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:700;flex:none}
+  .mk.ok{background:var(--good-soft);color:var(--good)}
+  .mk.no{background:var(--bad-soft);color:var(--bad)}
+  .check .row .desc{color:var(--ink-muted);font-size:12px}
+  .check .row .rv{margin-left:auto;font-family:var(--mono);font-size:12.5px;color:var(--ink)}
+
+  /* Charts */
+  .chart-wrap{margin-top:8px}
+  .chart-head{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;margin-bottom:6px}
+  .chart-head .ct{font-size:13px;font-weight:600}
+  .chart-head .cs{font-size:11.5px;color:var(--ink-faint);font-family:var(--mono)}
+  canvas{width:100%;display:block;border-radius:var(--r-sm)}
+  .cc{position:relative}
+  .tip{position:absolute;pointer-events:none;background:var(--surface-3);border:1px solid var(--border);border-radius:6px;padding:6px 9px;font-family:var(--mono);font-size:11.5px;color:var(--ink);opacity:0;transition:opacity .1s;white-space:nowrap;transform:translate(-50%,-115%);z-index:5;box-shadow:0 4px 14px rgba(0,0,0,.4)}
+
+  table.pnl{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12.5px;margin-top:6px}
+  table.pnl th,table.pnl td{text-align:right;padding:7px 9px;border-bottom:1px solid var(--border-soft)}
+  table.pnl th:first-child,table.pnl td:first-child{text-align:left;color:var(--ink-muted)}
+  table.pnl th{font-weight:500;color:var(--ink-faint);font-size:11px;text-transform:uppercase;letter-spacing:.06em}
+  table.pnl td.pos{color:var(--good)}
+  table.pnl td.neg{color:var(--bad)}
+  .tbl-scroll{overflow-x:auto}
+
+  .disclaimer{margin-top:22px;font-size:11.5px;color:var(--ink-faint);border-top:1px solid var(--border-soft);padding-top:16px;line-height:1.6}
+  .disclaimer b{color:var(--ink-muted)}
+
+  @media (max-width:820px){
+    .loader{grid-template-columns:1fr}
+    .ctrl-grid{grid-template-columns:repeat(2,1fr)}
+    .ctrl-group{grid-column:span 2}
+    .field.wide{grid-column:span 1}
+    .tiles{grid-template-columns:repeat(3,1fr)}
+    .bars{grid-template-columns:1fr}
+    .verdict{grid-template-columns:1fr;text-align:center;justify-items:center}
+  }
+  @media (max-width:480px){
+    .tiles{grid-template-columns:repeat(2,1fr)}
+    .brand h1{font-size:21px}
+  }
+  @media (max-width:820px){ .roll-ctrls{grid-template-columns:repeat(2,minmax(0,1fr))!important} .tiles{grid-template-columns:repeat(3,minmax(0,1fr))!important} }
+  @media (max-width:480px){ .roll-ctrls{grid-template-columns:minmax(0,1fr)!important} .tiles{grid-template-columns:repeat(2,minmax(0,1fr))!important} .tile .t-val{font-size:16px;overflow-wrap:anywhere} }
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <span class="eyebrow">Systematic strategies · Risk-limit backtester</span>
+      <h1>Risk-Limit Survival Backtester</h1>
+      <p>Tests whether a systematic strategy <b>survives hard risk limits</b> (daily-loss limit, maximum drawdown, profit target, minimum trading days) on hourly data: how often it reaches the target, how often it breaches a limit and how often it runs out of time. Includes walk-forward, Monte Carlo and statistical-edge tests.</p>
+    </div>
+    <div class="chips">
+      <span class="chip">Asset <b id="chipSym">—</b></span>
+      <span class="chip">TF <b id="chipTf">—</b></span>
+      <span class="chip">Limits <b id="chipRules">—</b></span>
+      <span class="chip">Account <b id="chipAcc">$6,000</b></span>
+    </div>
+  </header>
+
+  <!-- DATA LOADER -->
+  <section class="card">
+    <h2>1 · Data <span class="tag">preloaded or your CSV</span></h2>
+    <p class="sub">BTCUSDT hourly bars (Binance public data) load by default. You can also load any OHLC export from MetaTrader 5 or another source; files are read in your browser and never uploaded.</p>
+    <div class="loader" style="margin-top:14px">
+      <div class="drop" id="drop">
+        <div class="big">Drop a CSV here (MT5 export or OHLC)</div>
+        <div class="small">or pick a file · .csv / .txt / .tsv</div>
+        <div class="btn-row">
+          <button class="btn primary" id="btcBtn">BTCUSDT H1 · Binance</button>
+          <button class="btn" id="pickBtn">Load your CSV</button>
+          <button class="btn ghost" id="sampleBtn">Synthetic example</button>
+        </div>
+        <input type="file" id="file" accept=".csv,.txt,.tsv" hidden>
+      </div>
+      <div class="howto">
+        <h3>Exporting a CSV from MT5</h3>
+        <ol>
+          <li>In MT5 press <kbd>Ctrl</kbd>+<kbd>U</kbd> (Symbols).</li>
+          <li>Select the symbol (index, FX, crypto…) and open the <b>Bars</b> tab.</li>
+          <li>Choose the date range and the <b>H1</b> timeframe.</li>
+          <li>Click <b>Export Bars</b> and save the file.</li>
+          <li>Load it here with the button on the left.</li>
+        </ol>
+      </div>
+    </div>
+    <div class="status" id="status"></div>
+    <div class="window-tag" id="windowTag">
+      <span class="lbl">Backtest data</span>
+      <span id="windowText" class="mono"></span>
+    </div>
+    <div style="margin-top:14px;display:flex;flex-wrap:wrap;align-items:center;gap:10px;border-top:1px solid var(--border-soft);padding-top:14px">
+      <button class="btn ghost" id="refBtn">Load reference CSV (another asset)</button>
+      <input type="file" id="refFile" accept=".csv,.txt,.tsv" hidden>
+      <span class="status" id="refStatus" style="margin:0">Optional · only for strategies 2 and 4 (relative strength).</span>
+    </div>
+    <div style="margin-top:10px;display:flex;flex-wrap:wrap;align-items:center;gap:10px">
+      <button class="btn ghost" id="univBtn">Add assets to the universe (several CSVs)</button>
+      <input type="file" id="univFile" accept=".csv,.txt,.tsv" multiple hidden>
+      <span class="status" id="univStatus" style="margin:0">Optional · only for rotating across assets in strategy 7. The main asset is included automatically.</span>
+    </div>
+  </section>
+
+  <!-- CONTROLS -->
+  <section class="card" id="controlsCard" hidden>
+    <h2>2 · Parameters <span class="tag">adjust and recompute</span></h2>
+    <p class="sub">Everything recomputes instantly. Spread and commission are charged on every simulated trade.</p>
+    <div class="ctrl-grid" id="ctrls"></div>
+    <div class="btn-row" style="justify-content:flex-start;margin-top:16px">
+      <button class="btn" id="resetBtn">↺ Reset this strategy's parameters</button>
+    </div>
+    <p class="muted-note">All result cards (rolling windows, Monte Carlo, equity, edge) use the <b>in-sample period</b> only: from "In-sample from" to the start of the out-of-sample. The out-of-sample is sealed for the walk-forward. Outcomes are evaluated against the <b>account limits</b> set below; the optional risk guard cuts earlier, with a safety margin.</p>
+  </section>
+
+  <!-- RESULTS -->
+  <div id="results" hidden>
+    <section class="card" id="robustCard">
+      <h2>Does it survive the limits? · rolling windows <span class="tag">main result</span></h2>
+      <p class="sub">Simulates a fresh evaluation (account reset, same limits) starting on many different dates and counts how many <b>pass</b> (reach the target), how many <b>breach</b> a limit (daily loss of 5% of the initial balance or total drawdown of 10%) and how many <b>run out of time</b> without reaching the target. The minimum number of trading days is also required.</p>
+      <div class="roll-ctrls">
+        <div class="field">
+          <label>Length of each evaluation <span class="val" id="v_win">90 days</span></label>
+          <input type="range" id="rw_win" min="30" max="180" step="15" value="90">
+        </div>
+        <div class="field">
+          <label>New window every <span class="val" id="v_step">7 days</span></label>
+          <input type="range" id="rw_step" min="3" max="30" step="1" value="7">
+        </div>
+      </div>
+      <div class="rate" id="rollRate"></div>
+      <div class="tiles" id="rollTiles" style="grid-template-columns:repeat(5,1fr)"></div>
+      <div class="chart-head" style="margin-top:18px"><span class="ct">Each simulated evaluation, by start date</span><span class="cs" id="rollSummary"></span></div>
+      <div class="cc chart-wrap"><canvas id="rollChart" height="150"></canvas><div class="tip" id="rollTip"></div></div>
+      <div class="legend" id="rollLegend"></div>
+      <div class="chart-head" style="margin-top:22px;align-items:center"><span class="ct">Risk-per-trade sweep · same strategy, same windows</span><button class="btn" id="sweepBtn" type="button">Run sweep</button></div>
+      <div class="tbl-scroll"><table class="pnl" id="sweepTable"></table></div>
+      <p class="muted-note" id="sweepNote">Sweeps "Risk per trade" from 0.25% to 3% and shows the pass / breach / no-target split for each value: a direct way to choose how much to risk under the limits.</p>
+    </section>
+
+    <section class="card" id="mcCard">
+      <h2>Breach risk · Monte Carlo <span class="tag">drawdown distribution</span></h2>
+      <p class="sub">Resamples the order of your trades thousands of times (bootstrap) so the result does not depend on a single historical sequence. Gives the <b>probability of passing</b> and, above all, the <b>drawdown distribution</b>: the real risk of breaching the account.</p>
+      <div class="roll-ctrls" style="grid-template-columns:1fr 1fr 1fr">
+        <div class="field">
+          <label>Evaluation horizon <span class="val" id="v_mchor">90 days</span></label>
+          <input type="range" id="mc_hor" min="30" max="365" step="15" value="90">
+        </div>
+        <div class="field">
+          <label>Number of simulations <span class="val" id="v_mcn">2,000</span></label>
+          <input type="range" id="mc_n" min="500" max="5000" step="500" value="2000">
+        </div>
+        <div class="field">
+          <label>Block length <span class="val" id="v_mcblock">1 (i.i.d.)</span></label>
+          <input type="range" id="mc_block" min="1" max="20" step="1" value="1">
+        </div>
+      </div>
+      <div class="rate" id="mcProb"></div>
+      <div class="tiles" id="mcTiles" style="grid-template-columns:repeat(3,1fr)"></div>
+      <div class="chart-head" style="margin-top:18px"><span class="ct">Distribution of the final result</span><span class="cs" id="mcSummary"></span></div>
+      <div class="cc chart-wrap"><canvas id="mcChart" height="190"></canvas><div class="tip" id="mcTip"></div></div>
+      <p class="muted-note" id="mcCaveat"></p>
+    </section>
+
+    <section class="card" id="eqCard">
+      <div class="chart-head"><span class="ct">Equity curve · full in-sample (context, not the verdict)</span><span class="cs" id="eqSummary"></span></div>
+      <div class="cc chart-wrap"><canvas id="equityChart" height="240"></canvas><div class="tip" id="eqTip"></div></div>
+    </section>
+
+    <div class="section-sep"><span>Statistical evidence</span> Does the strategy have its own edge, or does it just ride the market? This does not decide whether it survives the limits, but it tells you how much to trust that it will repeat.</div>
+
+    <section class="card" id="edgeCard">
+      <h2>Statistical edge <span class="tag">is there a real edge?</span></h2>
+      <p class="sub">Measures whether the strategy wins by edge or by luck, independently of the account limits. <b>Expectancy</b> is the average gain per trade in multiples of the risk ("R"). The <b>t-stat</b> tells whether that edge is statistically reliable.</p>
+      <div class="rate" id="edgeSig"></div>
+      <div class="tiles" id="edgeTiles" style="grid-template-columns:repeat(7,1fr)"></div>
+      <p class="muted-note" id="edgeNote"></p>
+    </section>
+
+    <section class="card" id="selCard" hidden>
+      <h2>Selection vs chance · permutation test <span class="tag">does picking the strongest add anything?</span></h2>
+      <p class="sub">In a rising market any long-only strategy wins through beta. Here the rotation is compared with 2,000 rotations that pick an asset <b>at random</b> on the same days the rotation is invested, with the same costs. If the rotation does not beat 95% of the random ones (p &lt; 0.05), <b>there is no selection skill</b>: the result is beta, not edge.</p>
+      <div class="rate" id="selRate"></div>
+      <div class="tiles" id="selTiles" style="grid-template-columns:repeat(4,1fr)"></div>
+      <div class="chart-head" style="margin-top:18px"><span class="ct">Random rotations · cumulative R (no stops, with costs)</span><span class="cs" id="selSummary"></span></div>
+      <div class="cc chart-wrap"><canvas id="selChart" height="170"></canvas></div>
+      <p class="muted-note" id="selBase"></p>
+    </section>
+
+    <section class="card" id="wfCard">
+      <h2>Walk-forward · out-of-sample <span class="tag">the anti-self-deception test</span></h2>
+      <p class="sub">The panel <b>optimises only</b> the strategy's own parameters on the <i>in-sample</i> period and applies them, unchanged, to the period it <b>never saw</b> (<i>out-of-sample</i>). By default the out-of-sample starts on <b>1 January 2026</b> (sealed holdout). It measures what matters: whether, out of sample, the strategy passes or breaches.</p>
+      <div class="roll-ctrls" style="grid-template-columns:repeat(4,minmax(0,1fr))">
+        <div class="field">
+          <label>Mode</label>
+          <select id="wf_mode"><option value="holdout">Date holdout</option><option value="folds">Anchored folds (edge)</option></select>
+        </div>
+        <div class="field" id="wf_dateWrap">
+          <label>Out-of-sample from</label>
+          <input type="date" id="wf_oos" value="2026-01-01">
+        </div>
+        <div class="field" id="wf_objWrap">
+          <label>Optimise in-sample for</label>
+          <select id="wf_obj"><option value="survival">Survival</option><option value="edge">Expectancy (R)</option></select>
+        </div>
+        <div class="field" id="wf_foldsWrap" hidden>
+          <label>Number of folds <span class="val" id="v_wffolds">4</span></label>
+          <input type="range" id="wf_folds" min="3" max="6" step="1" value="4">
+        </div>
+        <div class="field" style="justify-content:flex-end">
+          <button class="btn primary" id="wfRun">▶ Run walk-forward</button>
+        </div>
+      </div>
+      <div class="rate" id="wfVerdict"><span class="lbl" id="wfHint">Click "Run walk-forward".</span></div>
+      <div id="wfOverfit"></div>
+      <div class="tiles" id="wfTiles" style="grid-template-columns:repeat(3,1fr)"></div>
+      <div class="tbl-scroll"><table class="pnl" id="wfTable"></table></div>
+      <p class="muted-note" id="wfCaveat"></p>
+    </section>
+  </div>
+
+  <p class="disclaimer">
+    <b>Disclaimer.</b> Research and educational tool. This is a simplified simulation (bar-by-bar execution, estimated costs, no slippage or weekend gaps) and does not replace a broker-grade strategy tester. Past or simulated results do not guarantee future results. Not investment advice.
+    · Built by <a href="https://github.com/gmendozaveirana">Gaston M. Mendoza Veirana</a> · <a href="https://github.com/gmendozaveirana/risk-limit-backtester">source code</a>
+  </p>
+</div>
+
+<script>
+"use strict";
+(function(){
+  // ---------- Parameter schemas ----------
+  // Each strategy has its OWN parameter set (independent of the others).
+  // Only account/instrument settings (risk, costs, account limits) are shared.
+  const F = {
+    emaFast:  {t:"Fast EMA", type:"range", min:10, max:100, step:1},
+    emaSlow:  {t:"Slow EMA", type:"range", min:100, max:300, step:5},
+    rsiPeriod:{t:"RSI period", type:"range", min:5, max:30, step:1},
+    rsiMax:   {t:"Max RSI to buy (shorts: min 100−x)", type:"range", min:55, max:85, step:1},
+    atrPeriod:{t:"ATR period", type:"range", min:5, max:30, step:1},
+    slMult:   {t:"Stop = ATR ×", type:"range", min:0.5, max:6, step:0.1},
+    pullback: {t:"Pullback to EMA (×ATR)", type:"range", min:0, max:2, step:0.1},
+    rr:       {t:"Reward/risk ratio (RR)", type:"range", min:1, max:5, step:0.1},
+    trailing: {t:"Trailing stop", type:"toggle"},
+    trailATR: {t:"Trailing (×ATR)", type:"range", min:0.5, max:4, step:0.1},
+    breakeven:{t:"Break-even at 1:1", type:"toggle"},
+    rsK:      {t:"Relative-strength lookback (bars)", type:"range", min:20, max:300, step:10},
+    rsMargin: {t:"Minimum margin over the reference (%)", type:"range", min:0, max:2, step:0.1},
+    volLo:    {t:"Min volatility (percentile)", type:"range", min:0, max:100, step:5},
+    volHi:    {t:"Max volatility (percentile)", type:"range", min:0, max:100, step:5},
+    entryHour:{t:"Entry hour (0-23)", type:"range", min:0, max:23, step:1},
+    exitHour: {t:"Exit hour (0-23)", type:"range", min:0, max:23, step:1},
+    maxBars:  {t:"Max bars in position", type:"range", min:2, max:48, step:1},
+    mrHour:   {t:"Entry hour (0-23)", type:"range", min:0, max:23, step:1},
+    mrRsi:    {t:"Buy if RSI < x (sell if > 100−x)", type:"range", min:15, max:50, step:1},
+    mrExitHour:{t:"Exit hour (0-23)", type:"range", min:0, max:23, step:1},
+    rotL:     {t:"Momentum lookback (days)", type:"range", min:3, max:120, step:1},
+    rotHour:  {t:"Rebalance hour (data time zone)", type:"range", min:0, max:23, step:1},
+    rotAbs:   {t:"Absolute filter (long only if rising · short only if falling)", type:"toggle"},
+    rotSL:    {t:"Stop = daily ATR ×", type:"range", min:0.3, max:5, step:0.05},
+    rotATR:   {t:"Daily ATR period", type:"range", min:5, max:30, step:1},
+    dir:      {t:"Direction", type:"select", opts:[["long","Long only"],["short","Short only"],["both","Long and short"]]},
+    risk:     {t:"Risk per trade (%)", type:"range", min:0.1, max:3, step:0.05},
+    leverage: {t:"Max leverage (1:X) · caps position size", type:"num", min:1, max:500, step:1},
+    isFrom:   {t:"In-sample from", type:"date"},
+    cdN:      {t:"Pause after N consecutive losses (0 = no pause)", type:"range", min:0, max:10, step:1},
+    cdDays:   {t:"Pause length (days)", type:"range", min:1, max:30, step:1},
+    ddCut:    {t:"Halve risk if drawdown from start exceeds (%) · 0 = off", type:"num", min:0, max:10, step:0.5},
+    contract: {t:"Contract size (units per lot) · 0 = continuous size", type:"num", min:0, max:1000000, step:1},
+    volMin:   {t:"Minimum volume (lots)", type:"num", min:0, max:100, step:0.01},
+    volStep:  {t:"Volume step (lots)", type:"num", min:0.0001, max:100, step:0.01},
+    maxTrades:{t:"Max trades/day", type:"range", min:1, max:5, step:1},
+    spread:   {t:"Spread (price units · detected from the CSV)", type:"num", min:0, max:100000, step:0.01},
+    commission:{t:"Commission (% of notional, round trip)", type:"num", min:0, max:1, step:0.001},
+    minDays:  {t:"Minimum trading days", type:"num", min:0, max:30, step:1},
+    account:  {t:"Account size ($)", type:"num", min:1000, max:200000, step:500},
+    target:   {t:"Profit target (%)", type:"num", min:1, max:20, step:0.5},
+    daily:    {t:"Daily loss limit (%)", type:"num", min:1, max:10, step:0.5},
+    dailyRef: {t:"Daily loss is measured from…", type:"select", opts:[["max","the higher of balance and equity (conservative)"],["balance","the balance at midnight"]]},
+    guard:    {t:"Risk guard: cuts N % points before each limit · 0 = off", type:"num", min:0, max:4, step:0.25},
+    riskCap:  {t:"Max actual risk after lot rounding (% of INITIAL balance) · 0 = no cap", type:"num", min:0, max:5, step:0.05},
+    riskBase: {t:"Risk per trade is computed on…", type:"select", opts:[["initial","the initial balance (fixed)"],["balance","the current balance"]]},
+    volRound: {t:"Lot rounding", type:"select", opts:[["nearest","to the nearest lot"],["floor","always down"]]},
+    maxDD:    {t:"Max total drawdown (%)", type:"num", min:2, max:20, step:0.5},
+  };
+  const TUNED    = {emaFast:49, emaSlow:175, rsiPeriod:15, rsiMax:74, atrPeriod:14, slMult:1.5, pullback:1.5, rr:3.4, trailing:true, trailATR:1.5, breakeven:true};
+  const STANDARD = {emaFast:50, emaSlow:200, rsiPeriod:14, rsiMax:70, atrPeriod:14, slMult:1.5, pullback:0.5, rr:2.0, trailing:true, trailATR:1.5, breakeven:true};
+  const CORE = ["emaFast","emaSlow","rsiPeriod","rsiMax","atrPeriod","slMult","pullback","rr","trailing","trailATR","breakeven"];
+  const STRATS = [
+    {id:"trend", name:"1 · EMA trend + pullback", ref:false, trendFam:true,
+     desc:"Buys pullbacks to the fast EMA when price and the fast EMA are above the slow EMA and RSI is not overbought. Shorts mirror it: sells rallies to the fast EMA in a downtrend. No extra filters.",
+     groups:[["Entry and exit",CORE]], defs:Object.assign({},TUNED)},
+    {id:"trendRS", name:"2 · Relative strength vs reference", ref:true, trendFam:true,
+     desc:"Same trend trigger, but only trades when the main asset has outperformed the reference over the last k bars. Requires a reference loaded in the SAME timeframe.",
+     groups:[["Entry and exit",CORE],["Relative strength",["rsK","rsMargin"]]], defs:Object.assign({},TUNED,{rsK:100,rsMargin:0})},
+    {id:"trendVol", name:"3 · Volatility regime", ref:false, trendFam:true,
+     desc:"Same trend trigger, but only trades when volatility (ATR/price) is inside a percentile band of the loaded series.",
+     groups:[["Entry and exit",CORE],["Volatility regime",["volLo","volHi"]]], defs:Object.assign({},TUNED,{volLo:25,volHi:75})},
+    {id:"trendCombo", name:"4 · Combined: volatility + relative strength", ref:true, trendFam:true,
+     desc:"Requires both conditions at once: volatility band and relative strength over the reference. Requires the reference in the SAME timeframe.",
+     groups:[["Entry and exit",CORE],["Relative strength",["rsK","rsMargin"]],["Volatility regime",["volLo","volHi"]]], defs:Object.assign({},TUNED,{rsK:100,rsMargin:0,volLo:0,volHi:65})},
+    {id:"session", name:"5 · Session momentum (fixed hour)", ref:false,
+     desc:"Enters at a fixed hour and exits at another hour of the same day (captures intraday drift). Protective ATR stop. With \"Long and short\", the side of the day is set by the underlying trend (price above or below the 200-bar EMA).",
+     groups:[["Entry and exit",["entryHour","exitHour","maxBars","atrPeriod","slMult"]]], defs:{entryHour:1,exitHour:22,maxBars:30,atrPeriod:14,slMult:3}},
+    {id:"meanrev", name:"6 · Intraday mean reversion (fade oversold)", ref:false,
+     desc:"At a fixed hour, buys if RSI is oversold, expecting a rebound (shorts: sells if overbought). Take-profit at a multiple of the stop, or exit by time.",
+     groups:[["Entry and exit",["mrHour","mrRsi","rsiPeriod","mrExitHour","maxBars","atrPeriod","slMult","rr"]]], defs:{mrHour:9,mrRsi:35,rsiPeriod:14,mrExitHour:22,maxBars:12,atrPeriod:14,slMult:2,rr:1.5}},
+    {id:"rotation", name:"7 · Multi-asset rotation (dual momentum)", ref:false, universe:true,
+     desc:"Once a day, at the rebalance hour, ranks the universe by its return over the last L days. Long: holds the top asset (with the absolute filter, only if it is rising). Short: sells the bottom asset (with the filter, only if it is falling). Long and short: long the top if rising, otherwise short the bottom if falling. With a single asset it is daily trend following. Stop in multiples of the daily ATR. Uses each asset's spread from its CSV and the leverage and commission of its asset class (crypto 1:1 and 0.04%; indices 1:25); the common spread, commission and leverage do not apply.",
+     groups:[["Rotation",["rotL","rotHour","rotAbs","rotSL","rotATR"]],["Losing-streak management",["cdN","cdDays","ddCut"]]], defs:{rotL:20,rotHour:20,rotAbs:true,rotSL:0.5,rotATR:14,cdN:3,cdDays:10,ddCut:0}},
+  ];
+  const COMMON_GROUPS=[["Trading · all strategies",["dir","risk","riskBase","riskCap","maxTrades","leverage"]],["Costs · all strategies",["spread","commission"]],["Contract specification · lot rounding",["contract","volMin","volStep","volRound"]],["In-sample period · all strategies (ends where the out-of-sample starts)",["isFrom"]],["Account limits · all strategies",["account","target","daily","dailyRef","maxDD","guard","minDays"]]];
+  const COMMON_DEFS={dir:"long",risk:1.0,maxTrades:1,leverage:25,isFrom:"2022-01-01",oosFrom:"2026-01-01",contract:0,volMin:0.01,volStep:0.01,spread:2.0,commission:0,pointValue:1,account:6000,target:8,daily:5,dailyRef:"max",maxDD:10,guard:1,riskCap:1,riskBase:"initial",volRound:"nearest",minDays:5};
+  const INERT={emaFast:50,emaSlow:200,rsiPeriod:14,rsiMax:70,atrPeriod:14,slMult:1.5,pullback:0.5,rr:2,trailing:false,trailATR:1.5,breakeven:false,rsK:100,rsMargin:0,volLo:0,volHi:100,entryHour:1,exitHour:22,maxBars:30,mrHour:9,mrRsi:35,mrExitHour:22,rotL:20,rotHour:20,rotAbs:true,rotSL:2,rotATR:14,cdN:0,cdDays:5,ddCut:0};
+  const SMAP={}; STRATS.forEach(s=>SMAP[s.id]=s);
+  const P = {strategy:"trend", c:Object.assign({},COMMON_DEFS), s:{}};
+  STRATS.forEach(s=>{ P.s[s.id]=Object.assign({},s.defs); });
+  // Effective parameters = shared + the selected strategy's. Strategies never mix.
+  function effP(){
+    const st=SMAP[P.strategy];
+    return Object.assign({}, INERT, P.c, P.s[P.strategy], {
+      strategy:P.strategy, trendFam:!!st.trendFam,
+      rsFilter: P.strategy==="trendRS"||P.strategy==="trendCombo",
+      volFilter: P.strategy==="trendVol"||P.strategy==="trendCombo"
+    });
+  }
+
+  const $ = id=>document.getElementById(id);
+  let BARS = null, isSample = false;
+  let REF = null, REFname = null, REFbars = null;   // referencia (otro activo): Map(timestamp -> close)
+  let SYM = "—";                                     // main asset symbol (from the file name)
+  let UNIV = [];      // rotation universe: [{name, bars, spread, tf}]
+  let ROT = null;     // aligned rotation structures (cache)
+  function selectedNames(){ const st=P.s.rotation; return UNIV.filter(u=>st["u_"+u.name]!==false).map(u=>u.name); }
+
+  // ---------- Strategy selector + dynamic controls ----------
+  const ctrls = $("ctrls");
+  const topBar=document.createElement("div"); topBar.className="strat-top";
+  topBar.innerHTML='<div class="field" style="flex:1 1 320px;max-width:440px"><label style="font-size:12px;color:var(--ink);font-weight:600">Strategy</label><select id="c_strategy"></select></div>'+
+    '<div class="field" id="presetWrap" style="flex:1 1 320px"><label style="font-size:12px;color:var(--ink);font-weight:600">Parameter preset (this strategy only)</label>'+
+    '<div class="btn-row" style="justify-content:flex-start"><button class="btn" id="presetTuned" type="button">Tuned values</button><button class="btn" id="presetStd" type="button">A-priori standard (anti-bias)</button></div></div>';
+  ctrls.parentNode.insertBefore(topBar, ctrls);
+  const stratNote=document.createElement("div"); stratNote.id="stratNote"; stratNote.className="strat-note";
+  ctrls.parentNode.insertBefore(stratNote, ctrls);
+  const stratSel=$("c_strategy");
+  STRATS.forEach(s=>{ const o=document.createElement("option"); o.value=s.id; o.textContent=s.name; stratSel.appendChild(o); });
+  stratSel.value=P.strategy;
+  stratSel.addEventListener("change",()=>{ P.strategy=stratSel.value; buildControls(); resetWF(); run(); });
+  function applyPreset(pr){ const id=P.strategy; CORE.forEach(k=>{ P.s[id][k]=pr[k]; }); buildControls(); resetWF(); run(); }
+  $("presetTuned").addEventListener("click",()=>applyPreset(TUNED));
+  $("presetStd").addEventListener("click",()=>applyPreset(STANDARD));
+
+  function fmtParam(f,v){
+    if(f.step<1) return (+v).toFixed( f.step<0.1?2:1 );
+    return String(Math.round(v));
+  }
+  function tfLabel(bars){
+    if(!bars||bars.length<3) return "?";
+    const d=[]; for(let i=Math.max(1,bars.length-3000);i<bars.length;i++) d.push((bars[i].t-bars[i-1].t)/60000);
+    d.sort((a,b)=>a-b); const m=d[Math.floor(d.length/2)];
+    const map={1:"M1",5:"M5",15:"M15",30:"M30",60:"H1",240:"H4",1440:"D1"};
+    return map[m]||(m+" min");
+  }
+  function refCoverage(){
+    if(!BARS||!REF) return null;
+    let n=0; for(const b of BARS) if(REF.has(b.t.getTime())) n++;
+    return n/BARS.length;
+  }
+  function updateNote(){
+    const st=SMAP[P.strategy];
+    let h='<b>'+st.name.replace(/^\d+ · /,"")+'.</b> '+st.desc;
+    if(st.ref){
+      if(!REF){ h+='<div class="note-warn">⚠ This strategy needs a reference asset. Load it with "Load reference CSV" in section 1 (same timeframe). Without it no trade is opened.</div>'; }
+      else {
+        const cov=refCoverage(); const tfA=tfLabel(BARS), tfB=tfLabel(REFbars);
+        const ok = tfA===tfB && cov!=null && cov>=0.9;
+        h+='<div class="'+(ok?"note-ok":"note-warn")+'">'+(ok?"✓":"⚠")+' Main: <b>'+SYM+' '+tfA+'</b> · Reference: <b>'+(REFname||"")+' '+tfB+'</b> · Timestamp alignment: <b>'+(cov!=null?(cov*100).toFixed(1)+'%':'—')+'</b>'+
+           (ok?'':' — both files must have the same timeframe and period; otherwise the comparison is not valid.')+'</div>';
+      }
+    }
+    if(st.universe){
+      const sel=selectedNames();
+      if(UNIV.length<1){ h+='<div class="note-warn">⚠ Load real data first in section 1 (the synthetic example does not work for this strategy).</div>'; }
+      else {
+        const tfs=[...new Set(UNIV.map(u=>u.tf))];
+        const ok=tfs.length===1 && sel.length>=1;
+        const t0=Math.max(...UNIV.filter(u=>sel.includes(u.name)).map(u=>u.bars[0].t.getTime())), t1=Math.min(...UNIV.filter(u=>sel.includes(u.name)).map(u=>u.bars[u.bars.length-1].t.getTime()));
+        h+='<div class="'+(ok?"note-ok":"note-warn")+'">'+(ok?"✓":"⚠")+' Universe: '+UNIV.map(u=>'<b>'+u.name+'</b> '+u.tf+' ('+u.cls+' · spread '+(+u.spread.toPrecision(3))+' · 1:'+u.lev+(u.comm?' · comm. '+u.comm+'%':'')+')').join(' · ')+
+           (sel.length>=1?' · common period <b>'+dstr(new Date(t0))+' – '+dstr(new Date(t1))+'</b>':'')+
+           (tfs.length>1?' — the files have different timeframes: the rotation is not valid.':'')+(sel.length<1?' — select at least 1 asset.':'')+'</div>'+
+           (sel.length===1?'<div class="note-warn">With a single asset there is no selection: without the absolute filter it is <b>buy and hold</b>; with the filter it is <b>trend following</b> on that asset. Useful as a pure-beta benchmark.</div>':'')+
+           exposureNote();
+      }
+    }
+    h+=riskWarn();
+    stratNote.innerHTML=h;
+  }
+  // Position size: "Risk per trade (%)" ÷ actual stop distance
+  function exposureNote(){
+    const risk=+P.c.risk, slm=+P.s.rotation.rotSL; let med=null;
+    if(ROT){ const sp=[]; for(const n of ROT.names) for(let j=0;j<ROT.reb.length;j++){ const a=ROT.datr[n][j]; if(a!=null) sp.push(slm*a/ROT.al[n][ROT.reb[j]].c); }
+      sp.sort((a,b)=>a-b); if(sp.length) med=sp[Math.floor(sp.length/2)]; }
+    if(med==null) return '<div class="note-ok" style="color:var(--ink-muted)">Position size ≈ "Risk per trade" ÷ stop distance. Computed once the universe is loaded.</div>';
+    const z=sizeX(risk,med), lev=z.x, notional=lev*(+P.c.account);
+    return '<div class="note-ok" style="color:var(--ink-muted)"><b>Position size</b> = "Risk per trade" ÷ stop distance = '+risk.toFixed(1)+'% ÷ '+(med*100).toFixed(2)+'% (median stop with "Stop = daily ATR ×" '+slm.toFixed(2)+') ≈ <b>'+lev.toFixed(2)+'× the account</b>'+(z.capped?' (capped by leverage 1:'+(+P.c.leverage)+')':'')+', i.e. a ~$'+Math.round(notional).toLocaleString("en-US")+' position on a $'+(+P.c.account).toLocaleString("en-US")+' account. If the asset rises 1%, the account rises ~'+lev.toFixed(2)+'%. To increase it: raise the risk or tighten the stop.</div>';
+  }
+  function riskWarn(){
+    const r=+P.c.risk; if(r<=1) return "";
+    return '<div class="note-warn">⚠ Risk per trade '+r.toFixed(1)+'%: each stop costs '+r.toFixed(1)+'% of the account. '+Math.ceil(5/r)+' stops in one day would hit a 5% daily limit, and '+Math.ceil(10/r)+' net losses a 10% total limit. Opening gaps can exceed the stop.</div>';
+  }
+  function fieldEl(key, store){
+    const f=F[key]; const wrap=document.createElement("div"); wrap.className="field";
+    if(f.type==="toggle"){
+      const lab=document.createElement("label"); lab.className="toggle";
+      const cb=document.createElement("input"); cb.type="checkbox"; cb.checked=!!store[key]; cb.id="c_"+key;
+      cb.addEventListener("change",()=>{store[key]=cb.checked; run();});
+      lab.appendChild(cb); lab.appendChild(document.createTextNode(f.t)); wrap.appendChild(lab);
+    } else if(f.type==="select"||f.type==="date"){
+      const lab=document.createElement("label"); lab.textContent=f.t; let inp;
+      if(f.type==="select"){ inp=document.createElement("select"); f.opts.forEach(([v,t])=>{ const o=document.createElement("option"); o.value=v; o.textContent=t; inp.appendChild(o); }); }
+      else { inp=document.createElement("input"); inp.type="date"; }
+      inp.value=store[key]; inp.id="c_"+key;
+      inp.addEventListener("change",()=>{ store[key]=inp.value; resetWF(); run(); });
+      wrap.appendChild(lab); wrap.appendChild(inp);
+    } else if(f.type==="num"){
+      const lab=document.createElement("label"); lab.textContent=f.t;
+      const inp=document.createElement("input"); inp.type="number"; inp.min=f.min; inp.max=f.max; inp.step=f.step; inp.value=store[key]; inp.id="c_"+key;
+      inp.addEventListener("input",()=>{ const v=parseFloat(inp.value); if(isFinite(v)){ store[key]=v; run(); } });
+      wrap.appendChild(lab); wrap.appendChild(inp);
+    } else {
+      const lab=document.createElement("label");
+      const span=document.createElement("span"); span.textContent=f.t;
+      const val=document.createElement("span"); val.className="val"; val.id="v_"+key; val.textContent=fmtParam(f,store[key]);
+      lab.appendChild(span); lab.appendChild(val);
+      const inp=document.createElement("input"); inp.type="range"; inp.min=f.min; inp.max=f.max; inp.step=f.step; inp.value=store[key]; inp.id="c_"+key;
+      inp.addEventListener("input",()=>{store[key]=parseFloat(inp.value); val.textContent=fmtParam(f,store[key]); run();});
+      wrap.appendChild(lab); wrap.appendChild(inp);
+    }
+    return wrap;
+  }
+  function addGroup(name, keys, store){
+    const grp=document.createElement("div"); grp.className="ctrl-group";
+    const gh=document.createElement("div"); gh.className="gh"; gh.textContent=name; grp.appendChild(gh);
+    const grid=document.createElement("div"); grid.className="ctrl-fields";
+    keys.forEach(k=>grid.appendChild(fieldEl(k,store)));
+    grp.appendChild(grid); ctrls.appendChild(grp);
+  }
+  function buildControls(){
+    ctrls.innerHTML="";
+    const st=SMAP[P.strategy];
+    st.groups.forEach(([name,keys])=>addGroup(name,keys,P.s[P.strategy]));
+    if(st.universe && UNIV.length) addGroup("Universe (assets included)", UNIV.map(u=>"u_"+u.name), P.s.rotation);
+    COMMON_GROUPS.forEach(([name,keys])=>addGroup(name,keys,P.c));
+    $("presetWrap").hidden=!st.trendFam;
+    updateNote();
+  }
+  buildControls();
+
+  // ---------- CSV parsing ----------
+  function parseCSV(text){
+    const raw = text.replace(/\r/g,"").split("\n").filter(l=>l.trim().length);
+    if(!raw.length) throw new Error("Empty file.");
+    // detect delimiter
+    const sample = raw.slice(0,5).join("\n");
+    let delim="\t";
+    const counts={"\t":(sample.match(/\t/g)||[]).length, ",":(sample.match(/,/g)||[]).length, ";":(sample.match(/;/g)||[]).length};
+    delim = Object.keys(counts).sort((a,b)=>counts[b]-counts[a])[0];
+    if(counts[delim]===0) delim=/\s{2,}/;
+    let rows = raw.map(l=> (delim instanceof RegExp)? l.trim().split(delim): l.split(delim).map(s=>s.trim()));
+    // header?
+    let header=null;
+    const first=rows[0];
+    const firstIsText = first.some(c=>/[a-zA-Z<>]/.test(c) && !/^\d{4}[.\-/]\d/.test(c));
+    if(firstIsText){ header=first.map(h=>h.toLowerCase().replace(/[<>]/g,"")); rows=rows.slice(1); }
+    // column mapping
+    let ci={date:-1,time:-1,open:-1,high:-1,low:-1,close:-1};
+    if(header){
+      header.forEach((h,i)=>{
+        if(/date|fecha/.test(h)&&ci.date<0)ci.date=i;
+        else if(/time|hora/.test(h)&&ci.time<0)ci.time=i;
+        else if(/open|apert/.test(h))ci.open=i;
+        else if(/high|max/.test(h))ci.high=i;
+        else if(/low|min/.test(h))ci.low=i;
+        else if(/close|cierre/.test(h))ci.close=i;
+      });
+    }
+    // fallback positional
+    const cols = rows[0]?rows[0].length:0;
+    if(ci.open<0||ci.high<0||ci.low<0||ci.close<0){
+      // Determine if col0 combines date+time
+      const c0=rows[0][0]||"";
+      const combined = /\d{4}[.\-/]\d{1,2}[.\-/]\d{1,2}[ T]\d{1,2}:\d{2}/.test(c0);
+      if(combined){ ci.date=0; ci.time=-1; ci.open=1;ci.high=2;ci.low=3;ci.close=4; }
+      else { ci.date=0; ci.time=1; ci.open=2;ci.high=3;ci.low=4;ci.close=5; }
+    }
+    const bars=[];
+    for(const r of rows){
+      if(r.length<4) continue;
+      const dt = parseDate(r[ci.date], ci.time>=0?r[ci.time]:"");
+      const o=+r[ci.open], h=+r[ci.high], l=+r[ci.low], c=+r[ci.close];
+      if(!dt || !isFinite(o)||!isFinite(h)||!isFinite(l)||!isFinite(c)) continue;
+      bars.push({t:dt,o,h,l,c});
+    }
+    if(bars.length<50) throw new Error("Too few valid bars ("+bars.length+"). Check that the CSV has date and OHLC columns.");
+    bars.sort((a,b)=>a.t-b.t);
+    return bars;
+  }
+  function parseDate(d,t){
+    if(!d) return null;
+    d=d.trim();
+    let str=d;
+    if(t && t.trim() && !/\d{1,2}:\d{2}/.test(d)) str=d+" "+t.trim();
+    // normalize separators in date part
+    const m=str.match(/(\d{4})[.\-/](\d{1,2})[.\-/](\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+    if(m){
+      return new Date(Date.UTC(+m[1],+m[2]-1,+m[3],+(m[4]||0),+(m[5]||0),+(m[6]||0)));
+    }
+    // dd.mm.yyyy
+    const m2=str.match(/(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{4})(?:[ T](\d{1,2}):(\d{2}))?/);
+    if(m2){ return new Date(Date.UTC(+m2[3],+m2[2]-1,+m2[1],+(m2[4]||0),+(m2[5]||0))); }
+    const ts=Date.parse(str);
+    return isNaN(ts)?null:new Date(ts);
+  }
+
+  // ---------- Indicators ----------
+  function ema(vals,period){
+    const out=new Array(vals.length).fill(null);
+    const k=2/(period+1); let prev=null;
+    for(let i=0;i<vals.length;i++){
+      if(i<period-1){continue;}
+      if(prev===null){ let s=0; for(let j=i-period+1;j<=i;j++)s+=vals[j]; prev=s/period; out[i]=prev; }
+      else { prev=vals[i]*k+prev*(1-k); out[i]=prev; }
+    }
+    return out;
+  }
+  function rsi(closes,period){
+    const out=new Array(closes.length).fill(null);
+    let ag=0,al=0;
+    for(let i=1;i<closes.length;i++){
+      const ch=closes[i]-closes[i-1];
+      const g=Math.max(ch,0), l=Math.max(-ch,0);
+      if(i<=period){ ag+=g; al+=l; if(i===period){ ag/=period; al/=period; out[i]=100-100/(1+(al===0?100:ag/al)); } }
+      else { ag=(ag*(period-1)+g)/period; al=(al*(period-1)+l)/period; out[i]=100-100/(1+(al===0?100:ag/al)); }
+    }
+    return out;
+  }
+  function atr(bars,period){
+    const out=new Array(bars.length).fill(null);
+    let prevC=bars[0].c, sum=0, prev=null;
+    const trs=[];
+    for(let i=0;i<bars.length;i++){
+      const b=bars[i];
+      const tr = i===0? (b.h-b.l) : Math.max(b.h-b.l, Math.abs(b.h-prevC), Math.abs(b.l-prevC));
+      trs.push(tr); prevC=b.c;
+      if(i<period){ sum+=tr; if(i===period-1){ prev=sum/period; out[i]=prev; } }
+      else { prev=(prev*(period-1)+tr)/period; out[i]=prev; }
+    }
+    return out;
+  }
+
+  // ---------- Simulation ----------
+  function run(o){
+    const p0=effP();
+    if(!(o&&o.keepSweep)) clearSweep(); const ca=$("chipAcc"); if(ca) ca.textContent="$"+(+P.c.account).toLocaleString("en-US"); const cr=$("chipRules"); if(cr) cr.textContent="+"+P.c.target+"% · −"+P.c.daily+"%/day · −"+P.c.maxDD+"%";
+    if(p0.strategy==="rotation"){
+      const names=selectedNames();
+      if(UNIV.length<1 || names.length<1 || new Set(UNIV.map(u=>u.tf)).size>1){ LAST=null; $("results").hidden=true; $("selCard").hidden=true; return; }
+      ensureRot(p0,names); updateNote();
+      const RG=rangeIdx(ROT.bars);
+      const res=simulate(ROT.bars,p0,ROT.ind,RG.s0,RG.e0); res.oos=RG.oos;
+      LAST=res; render(res); renderRolling(); renderEdge(); renderMC(); renderSel(p0);
+      return;
+    }
+    $("selCard").hidden=true;
+    updateNote();
+    if(!BARS) return;
+    const RG=rangeIdx(BARS);
+    const res=simulate(BARS,p0,null,RG.s0,RG.e0); res.oos=RG.oos;
+    LAST=res;
+    render(res);
+    renderRolling();
+    renderEdge();
+    renderMC();
+  }
+  let LAST=null;
+  // Indices of the in-sample period [s0,e0] and of the out-of-sample start (oos, −1 if no data after).
+  function rangeIdx(bars){
+    const a=Date.parse((P.c.isFrom||"")+"T00:00:00Z"), b=Date.parse((P.c.oosFrom||"")+"T00:00:00Z");
+    let s0=isFinite(a)? idxAtOrAfter(bars,a) : 0; if(s0<0) s0=0;
+    let oos=isFinite(b)? idxAtOrAfter(bars,b) : -1; if(oos>=0 && oos<=s0) oos=-1;
+    let e0= oos>0? oos-1 : bars.length-1;
+    if(e0-s0<200){ s0=0; e0= oos>200? oos-1 : bars.length-1; }   // range too short: use from the start
+    return {s0,e0,oos};
+  }
+  let ROLL_P={windowDays:90, stepDays:7};
+  let MC_P={horizonDays:90, nRuns:2000, blockLen:1};
+  function renderRolling(){
+    if(!LAST) return;
+    const rr=rolling(LAST.bars, LAST.ind, LAST.p, ROLL_P.windowDays, ROLL_P.stepDays, LAST.s0, LAST.e0);
+    drawRolling(rr, LAST.p);
+  }
+  function renderEdge(){ if(LAST) drawEdge(edgeStats(LAST)); }
+  function renderSel(p){ $("selCard").hidden=false; drawSel(selectionTest(p,2000)); }
+  function drawSel(s){
+    const rate=$("selRate"), tiles=$("selTiles"), base=$("selBase"), sum=$("selSummary");
+    const cv=$("selChart"); const {ctx,w,h}=setup(cv); ctx.clearRect(0,0,w,h);
+    if(s.single){ rate.innerHTML='<span class="lbl">With a single asset there is no selection to test: this mode is the beta benchmark (buy and hold / trend).</span>'; tiles.innerHTML=""; base.textContent=""; sum.textContent=""; return; }
+    if(s.insufficient){ rate.innerHTML='<span class="lbl">Too few rebalance days for the test. Load more history or lower the lookback.</span>'; tiles.innerHTML=""; base.textContent=""; sum.textContent=""; return; }
+    const sig=s.pval<0.05; const cls=sig?"g":(s.pval<0.2?"w":"r");
+    rate.innerHTML='<span class="big '+cls+'">p = '+s.pval.toFixed(3)+'</span><span class="lbl"><b>'+(sig?"The rotation beats chance (p &lt; 0.05)":"No detectable selection skill")+'</b><br>'+
+      'The rotation beats '+((1-s.pval)*100).toFixed(0)+'% of 2,000 random rotations with the same invested-day pattern ('+s.invested+' of '+s.days+' days).'+
+      (sig?' Note: if you tried several configurations, the real threshold is stricter (p &lt; 0.05 / number of tests).':'')+'</span>';
+    const t=[
+      {l:"Rotation",v:(s.rot>=0?"+":"")+s.rot.toFixed(1)+"R",c:sig?"pos":(s.rot<s.mean?"neg":"")},
+      {l:"Random · mean",v:(s.mean>=0?"+":"")+s.mean.toFixed(1)+"R",c:""},
+      {l:"Random · 95th pct",v:(s.p95>=0?"+":"")+s.p95.toFixed(1)+"R",c:""},
+      {l:"p-value",v:s.pval.toFixed(3),c:sig?"pos":"neg"},
+    ];
+    tiles.innerHTML=t.map(x=>'<div class="tile"><span class="t-lbl">'+x.l+'</span><span class="t-val '+x.c+'">'+x.v+'</span></div>').join("");
+    sum.textContent=s.days+" rebalance days";
+    base.innerHTML='<b>Benchmarks with the same daily schedule:</b> '+Object.keys(s.always).map(a=>'always '+a+' '+(s.always[a]>=0?"+":"")+s.always[a].toFixed(1)+'R').join(' · ')+
+      '. If the rotation does not beat holding a single asset, rotating adds nothing but costs.';
+    // histogram of random totals + marker for the rotation
+    const pad={l:20,r:14,t:20,b:26}, v=s.sims;
+    let min=Math.min(v[0],s.rot), max=Math.max(v[v.length-1],s.rot); const span=(max-min)||1; min-=span*0.05; max+=span*0.05;
+    const nb=36, bw=(max-min)/nb, bins=new Array(nb).fill(0);
+    v.forEach(x=>{ let k=Math.floor((x-min)/bw); if(k<0)k=0; if(k>=nb)k=nb-1; bins[k]++; });
+    const mc=Math.max.apply(null,bins)||1, X=x=>pad.l+(x-min)/(max-min)*(w-pad.l-pad.r), base0=h-pad.b;
+    for(let k=0;k<nb;k++){ const x0=X(min+k*bw), x1=X(min+(k+1)*bw); const y=pad.t+(1-bins[k]/mc)*(base0-pad.t);
+      ctx.fillStyle=css("--ink-faint"); ctx.fillRect(x0+1,y,Math.max(1,x1-x0-2),base0-y); }
+    ctx.strokeStyle=css("--border"); ctx.beginPath(); ctx.moveTo(pad.l,base0); ctx.lineTo(w-pad.r,base0); ctx.stroke();
+    const mark=(x,col,lbl)=>{ const px=X(x); ctx.save(); ctx.setLineDash([4,3]); ctx.strokeStyle=col; ctx.lineWidth=1.5; ctx.beginPath(); ctx.moveTo(px,pad.t); ctx.lineTo(px,base0); ctx.stroke(); ctx.restore();
+      ctx.fillStyle=col; ctx.font="11px monospace"; ctx.textAlign=px>w-120?"right":"left"; ctx.fillText(lbl, px+(px>w-120?-4:4), 13); };
+    mark(s.p95,css("--warn"),"random p95");
+    mark(s.rot,sig?css("--good"):css("--bad"),"rotation "+s.rot.toFixed(1)+"R");
+    ctx.fillStyle=css("--ink-faint"); ctx.font="11px monospace"; ctx.textAlign="left"; ctx.fillText(min.toFixed(0)+"R",pad.l,h-8); ctx.textAlign="right"; ctx.fillText(max.toFixed(0)+"R",w-pad.r,h-8);
+  }
+  function renderMC(){
+    if(!LAST) return;
+    const L=MC_P.blockLen;
+    const mc=monteCarlo(LAST, MC_P.horizonDays, MC_P.nRuns, L);
+    if(L>1 && !mc.insufficient){ const iid=monteCarlo(LAST, MC_P.horizonDays, MC_P.nRuns, 1); mc.iidPass=iid.passRate; mc.iidDdP95=iid.ddP95; mc.blockLen=L; }
+    drawMC(mc);
+  }
+  function computeInd(bars,p){
+    const closes=bars.map(b=>b.c);
+    const atrA=atr(bars,Math.round(p.atrPeriod));
+    // volatility (ATR/price) percentile rank for the regime filter
+    const vp=[]; for(let i=0;i<bars.length;i++){ if(atrA[i]!=null) vp.push(atrA[i]/bars[i].c); }
+    vp.sort((a,b)=>a-b);
+    const rankOf=v=>{ let lo=0,hi=vp.length; while(lo<hi){const m=(lo+hi)>>1; if(vp[m]<=v)lo=m+1; else hi=m;} return vp.length? lo/vp.length : 0; };
+    const volRank=bars.map((b,i)=> atrA[i]!=null? rankOf(atrA[i]/b.c) : null);
+    // reference close aligned by timestamp, for relative strength
+    let refClose=null;
+    if(REF){ refClose=bars.map(b=> REF.has(b.t.getTime())? REF.get(b.t.getTime()) : null); }
+    return {
+      emaF:ema(closes,Math.round(p.emaFast)),
+      emaS:ema(closes,Math.round(p.emaSlow)),
+      rsiA:rsi(closes,Math.round(p.rsiPeriod)),
+      atrA, volRank, refClose
+    };
+  }
+  function momC(bars,i,k){ return (i-k>=0)? bars[i].c/bars[i-k].c-1 : null; }
+  function momA(arr,i,k){ return (i-k>=0 && arr[i]!=null && arr[i-k]!=null)? arr[i]/arr[i-k]-1 : null; }
+  // ---------- Entry signals by strategy ----------
+  // Return {side:+1 long | −1 short, entry, slDist, tp,...}. Shorts are the exact mirror of longs.
+  function allowL(p){ return p.dir!=="short"; }
+  function allowS(p){ return p.dir==="short"||p.dir==="both"; }
+  function stratEntry(bars,ind,i,p){
+    const {emaF,emaS,rsiA,atrA}=ind; const at=atrA[i];
+    if(at==null||at<=0) return null;
+    const b=bars[i], c=b.c, lo=b.l, hi=b.h, hr=b.t.getUTCHours();
+    const mk=(side,sd,rr,extra)=>Object.assign({side, entry:c, slDist:sd, tp:(rr==null?null:c+side*rr*sd)}, extra||{});
+    if(p.strategy==="session"){
+      if(hr!==Math.round(p.entryHour)) return null;
+      // Long and short: follow the underlying trend (price vs slow EMA) to choose the side of the day.
+      let side = p.dir==="short"? -1 : 1;
+      if(p.dir==="both"){ if(emaS[i]==null) return null; side = c>=emaS[i]? 1 : -1; }
+      return mk(side, p.slMult*at, null, {exitHour:Math.round(p.exitHour), maxBars:Math.round(p.maxBars)});
+    }
+    if(p.strategy==="meanrev"){
+      if(rsiA[i]==null) return null;
+      if(hr!==Math.round(p.mrHour)) return null;
+      const ex={exitHour:Math.round(p.mrExitHour), maxBars:Math.round(p.maxBars)};
+      if(allowL(p) && rsiA[i]<p.mrRsi) return mk(1, p.slMult*at, p.rr, ex);
+      if(allowS(p) && rsiA[i]>100-p.mrRsi) return mk(-1, p.slMult*at, p.rr, ex);
+      return null;
+    }
+    // Familia tendencia: EMA + retroceso (espejo en cortos)
+    if(emaF[i]==null||emaS[i]==null||rsiA[i]==null) return null;
+    if(p.volFilter && ind.volRank[i]!=null){ if(ind.volRank[i]<p.volLo/100 || ind.volRank[i]>p.volHi/100) return null; }
+    let rsd=null;   // relative strength: asset − reference over lookback k
+    if(p.rsFilter){ if(!ind.refClose) return null; const mn=momC(bars,i,Math.round(p.rsK)), mu=momA(ind.refClose,i,Math.round(p.rsK)); if(mn==null||mu==null) return null; rsd=mn-mu; }
+    const m=(p.rsMargin||0)/100;
+    if(allowL(p)){
+      const up=c>emaS[i]&&emaF[i]>emaS[i], pull=lo<=emaF[i]+p.pullback*at&&c>emaF[i];
+      if(up&&pull&&rsiA[i]<p.rsiMax&&(rsd==null||rsd>m)) return mk(1, p.slMult*at, p.rr);
+    }
+    if(allowS(p)){
+      const dn=c<emaS[i]&&emaF[i]<emaS[i], pull=hi>=emaF[i]-p.pullback*at&&c<emaF[i];
+      if(dn&&pull&&rsiA[i]>100-p.rsiMax&&(rsd==null||rsd<-m)) return mk(-1, p.slMult*at, p.rr);
+    }
+    return null;
+  }
+  // ---------- Trade generator (independent of money) ----------
+  // ---------- Rotación multi-índice ----------
+  function buildRot(names, rebH, atrP){
+    const assets=names.map(n=>UNIV.find(u=>u.name===n));
+    const t0=Math.max(...assets.map(a=>a.bars[0].t.getTime())), t1=Math.min(...assets.map(a=>a.bars[a.bars.length-1].t.getTime()));
+    const set=new Set(); assets.forEach(a=>a.bars.forEach(b=>{const x=b.t.getTime(); if(x>=t0&&x<=t1) set.add(x);}));
+    const T=[...set].sort((a,b)=>a-b);
+    const al={}, actual={};
+    assets.forEach(a=>{
+      const m=new Map(a.bars.map(b=>[b.t.getTime(),b])); let last=null;
+      for(const b of a.bars){ if(b.t.getTime()<t0) last=b; else break; }
+      const arr=new Array(T.length), act=new Uint8Array(T.length);
+      for(let i=0;i<T.length;i++){ const b=m.get(T[i]); if(b){arr[i]=b;last=b;act[i]=1;} else { const c=last?last.c:null; arr[i]={t:new Date(T[i]),o:c,h:c,l:c,c:c}; } }
+      al[a.name]=arr; actual[a.name]=act;
+    });
+    // One rebalance per day: the LAST bar of the rebalance hour (M30 has two bars per hour; use the one closing at hour+1)
+    const reb=[]; for(let i=0;i<T.length;i++){ const d=new Date(T[i]); if(d.getUTCHours()!==rebH) continue;
+      if(i+1<T.length){ const d2=new Date(T[i+1]); if(d2.getUTCHours()===rebH && d2.getUTCDate()===d.getUTCDate()) continue; }
+      if(names.every(n=>actual[n][i])) reb.push(i); }
+    const datr={};
+    names.forEach(n=>{ const out=[], trs=[]; let prevC=null, a=null;
+      for(let j=0;j<reb.length;j++){ const i=reb[j], i0=j>0?reb[j-1]+1:Math.max(0,i-23); let h=-Infinity,l=Infinity;
+        for(let q=i0;q<=i;q++){ if(!actual[n][q]) continue; h=Math.max(h,al[n][q].h); l=Math.min(l,al[n][q].l); }
+        const c=al[n][i].c; const tr=prevC==null?h-l:Math.max(h-l,Math.abs(h-prevC),Math.abs(l-prevC)); prevC=c; trs.push(tr);
+        if(trs.length<atrP) out.push(null); else if(a==null){ a=trs.slice(-atrP).reduce((s,x)=>s+x,0)/atrP; out.push(a); } else { a=(a*(atrP-1)+tr)/atrP; out.push(a); } }
+      datr[n]=out; });
+    const rebIdxOf=new Int32Array(T.length).fill(-1); reb.forEach((i,j)=>{ rebIdxOf[i]=j; });
+    const bars=T.map(x=>({t:new Date(x),o:0,h:0,l:0,c:0}));
+    let warmJ=reb.findIndex((i,j)=>names.every(n=>datr[n][j]!=null));
+    const atrA=new Array(T.length).fill(null); if(warmJ>=0) for(let i=reb[warmJ];i<T.length;i++) atrA[i]=1;
+    return {key:names.join(",")+"|"+rebH+"|"+atrP, names, T, al, actual, reb, rebIdxOf, datr, bars, ind:{atrA},
+            spread:Object.fromEntries(assets.map(a=>[a.name,a.spread])),
+            lev:Object.fromEntries(assets.map(a=>[a.name,a.lev])), comm:Object.fromEntries(assets.map(a=>[a.name,a.comm]))};
+  }
+  function ensureRot(p,names){ const key=names.join(",")+"|"+Math.round(p.rotHour)+"|"+Math.round(p.rotATR); if(!ROT||ROT.key!==key) ROT=buildRot(names,Math.round(p.rotHour),Math.round(p.rotATR)); return ROT; }
+  // Target of the day: "ASSET|1" (long), "ASSET|-1" (short), null (flat) or undefined (no data yet).
+  function rotTarget(R,j,p){
+    const Lb=Math.round(p.rotL); if(j-Lb<0) return undefined;
+    if(!R.names.every(n=>R.datr[n][j]!=null)) return undefined;
+    const i=R.reb[j], i0=R.reb[j-Lb]; let best=null,bm=-Infinity,worst=null,wm=Infinity;
+    for(const n of R.names){ const m=R.al[n][i].c/R.al[n][i0].c-1; if(m>bm){bm=m;best=n;} if(m<wm){wm=m;worst=n;} }
+    if(p.dir==="short") return (p.rotAbs && wm>=0)? null : worst+"|-1";
+    if(p.dir==="both"){ if(bm>0) return best+"|1"; if(wm<0) return worst+"|-1"; return null; }
+    return (p.rotAbs && bm<=0)? null : best+"|1";
+  }
+  const tKey=k=>{ const q=k.split("|"); return {a:q[0], side:+q[1]}; };
+  function rotTrades(p,s,e){
+    const R=ROT, out=[]; let pos=null, streak=0, pauseUntil=-Infinity;
+    const cdN=Math.round(+p.cdN||0), cdMs=(+p.cdDays||0)*86400000;
+    const push=tr=>{ out.push(tr); if(cdN>0){ if(tradeR(tr,p)<0){ streak++; if(streak>=cdN){ pauseUntil=tr.t.getTime()+cdMs; streak=0; } } else streak=0; } };
+    const mk=(ps,i,px,wb)=>({iIn:ps.iIn,iOut:i,entry:ps.entry,exitPrice:px,slDist:ps.slDist,side:ps.side,wb:(wb==null?ps.sl:wb),t:R.bars[i].t,lows:R.al[ps.a],spread:R.spread[ps.a],lev:R.lev[ps.a],comm:R.comm[ps.a],asset:ps.a});
+    for(let i=s;i<=e;i++){
+      if(pos && i>pos.iIn && R.actual[pos.a][i]){ const b=R.al[pos.a][i];
+        if(pos.side>0 && b.l<=pos.sl){ const x=b.o<pos.sl? b.o : pos.sl; push(mk(pos,i,x,x)); pos=null; }
+        else if(pos.side<0 && b.h>=pos.sl){ const x=b.o>pos.sl? b.o : pos.sl; push(mk(pos,i,x,x)); pos=null; } }
+      const j=R.rebIdxOf[i]; if(j<0) continue;
+      const target=rotTarget(R,j,p); if(target===undefined) continue;
+      if(pos && pos.key!==target){ push(mk(pos,i,R.al[pos.a][i].c)); pos=null; }
+      if(!pos && target && R.bars[i].t.getTime()>=pauseUntil){ const {a,side}=tKey(target); const c=R.al[a][i].c, sd=p.rotSL*R.datr[a][j]; if(sd>0) pos={key:target,a,side,iIn:i,entry:c,sl:c-side*sd,slDist:sd}; }
+    }
+    if(pos && e>pos.iIn) out.push(mk(pos,e,R.al[pos.a][e].c));   // position open at the end of the segment: closed at the close
+    return out;
+  }
+  // Selection test: rotation vs random picks (same side, same invested days; no stops, with costs)
+  function selectionTest(p,nSims){
+    const R=ROT, n=R.names;
+    if(n.length<2) return {single:true};
+    const dR=(k,j)=>{ const {a,side}=tKey(k); return side*(R.al[a][R.reb[j+1]].c-R.al[a][R.reb[j]].c)/(p.rotSL*R.datr[a][j]); };
+    const cR=(k,j)=>{ const a=tKey(k).a; return R.spread[a]/(p.rotSL*R.datr[a][j]); };
+    const js=[], pat=[]; for(let j=0;j<R.reb.length-1;j++){ const t=rotTarget(R,j,p); if(t===undefined) continue; js.push(j); pat.push(t); }
+    if(js.length<30) return {insufficient:true};
+    const run=pick=>{ let tot=0, held=null; for(let q=0;q<js.length;q++){ const j=js[q], s=pick(q);
+        if(s!==held){ if(held) tot-=cR(held,j)/2; if(s) tot-=cR(s,j)/2; held=s; } if(held) tot+=dR(held,j); } return tot; };
+    const sideOf=k=>k.split("|")[1];
+    const rot=run(q=>pat[q]);
+    const sims=[]; for(let k=0;k<nSims;k++) sims.push(run(q=>pat[q]===null?null:n[(Math.random()*n.length)|0]+"|"+sideOf(pat[q])));
+    sims.sort((a,b)=>a-b);
+    const base={}; n.forEach(a=>{ base[a]=run(q=>pat[q]===null?null:a+"|"+sideOf(pat[q])); });
+    const always={}; n.forEach(a=>{ always[a]=run(()=>a+"|1"); });
+    return {rot, sims, mean:sims.reduce((s,x)=>s+x,0)/nSims, p95:sims[Math.floor(0.95*nSims)], pval:sims.filter(x=>x>=rot).length/nSims,
+            days:js.length, invested:pat.filter(x=>x).length, base, always};
+  }
+  function genTrades(bars,ind,p,s,e){
+    if(p.strategy==="rotation") return rotTrades(p,s,e);
+    const out=[]; let pos=null, dayKey=null, tradesToday=0, streak=0, pauseUntil=-Infinity;
+    const cdN=Math.round(+p.cdN||0), cdMs=(+p.cdDays||0)*86400000;
+    for(let i=s;i<=e;i++){
+      const b=bars[i];
+      const dk=b.t.getUTCFullYear()+"-"+b.t.getUTCMonth()+"-"+b.t.getUTCDate();
+      if(dk!==dayKey){ dayKey=dk; tradesToday=0; }
+      if(pos){
+        const sd=pos.side; let px=null, xi=null, wb=null;
+        if(pos.exitHour!=null && i>pos.iIn && b.t.getUTCHours()===pos.exitHour){ px=b.o; xi=i; wb=px; }
+        else if(pos.maxBars!=null && (i-pos.iIn)>=pos.maxBars){ px=b.o; xi=i; wb=px; }
+        if(px==null){
+          const adverse = sd>0? b.l : b.h, favor = sd>0? b.h : b.l;
+          if(sd*(adverse-pos.sl)<=0){ px= sd>0? Math.min(b.o,pos.sl) : Math.max(b.o,pos.sl); xi=i; wb=px; }   // stop (worst case first; if the bar gaps beyond the stop, fill at the open)
+          else if(pos.tp!=null && sd*(favor-pos.tp)>=0){ px=pos.tp; xi=i; wb=pos.sl; }
+        }
+        if(px!=null){ const tr={iIn:pos.iIn,iOut:xi,entry:pos.entry,exitPrice:px,slDist:pos.slDist,side:sd,wb,t:bars[xi].t}; out.push(tr); pos=null;
+          if(cdN>0){ if(tradeR(tr,p)<0){ streak++; if(streak>=cdN){ pauseUntil=tr.t.getTime()+cdMs; streak=0; } } else streak=0; } }
+        else if(p.trendFam) {
+          const favor = sd>0? b.h : b.l;
+          if(p.breakeven&&pos.tp!=null&&!pos.beDone&&sd*(favor-pos.entry)>=pos.slDist){ pos.sl = sd>0? Math.max(pos.sl,pos.entry) : Math.min(pos.sl,pos.entry); pos.beDone=true; }
+          if(p.trailing&&ind.atrA[i]){ const ts=b.c-sd*p.trailATR*ind.atrA[i]; if(sd*(ts-pos.sl)>0) pos.sl=ts; }
+        }
+      }
+      if(!pos && tradesToday<Math.round(p.maxTrades) && b.t.getTime()>=pauseUntil){
+        const sig=stratEntry(bars,ind,i,p);
+        if(sig){ const en=sig.entry; pos={iIn:i,side:sig.side,entry:en,sl:en-sig.side*sig.slDist,tp:sig.tp,slDist:sig.slDist,exitHour:(sig.exitHour==null?null:sig.exitHour),maxBars:(sig.maxBars==null?null:sig.maxBars),beDone:false}; tradesToday++; }
+      }
+    }
+    return out;
+  }
+  // R of a trade: (favourable move − spread − commission) ÷ stop distance. Independent of the contract.
+  function tradeR(tr,p){ const sp=(tr.spread!=null?tr.spread:p.spread), cm=(tr.comm!=null?tr.comm:p.commission); const sd=tr.side||1; return (sd*(tr.exitPrice-tr.entry) - sp - (cm/100)*tr.entry)/tr.slDist; }
+  function rOver(bars,ind,p,s,e){ return genTrades(bars,ind,p,s,e).map(tr=>tradeR(tr,p)); }
+  // Fraction of the requested risk allowed by leverage: notional = risk/stop ≤ leverage × balance.
+  function capFrac(tr,p){ const want=(p.risk/100)/(tr.slDist/tr.entry); const lev=Math.max(0.01,+(tr.lev!=null?tr.lev:p.leverage)||1e9); return Math.min(1, lev/want); }
+
+  // ---------- Money replay over [s,e] (account limits + optional curve) ----------
+  function replay(bars,trades,p,s,e,recordCurve,ind){
+    const g=Math.max(0,+p.guard||0);   // risk guard: closes everything g % points before each limit
+    // With the guard, reaching (max DD − g)% stops trading for good: counted as a breached account (conservative).
+    const pv=p.pointValue, initial=p.account, target=initial*(1+p.target/100), totalFloor=initial*(1-(p.maxDD-g)/100);
+    let balance=initial, dayKey=null, dayStart=initial, dayFloor=initial*(1-p.daily/100), tradesToday=0, dayBlocked=false, guardCuts=0;
+    let open=null, ti=0, verdict=null, dead=false, maxDDpctUsed=0, passIdx=-1, capped=0, nOpened=0;
+    const minD=Math.max(0,Math.round(p.minDays||0)); const tdays=new Set(); let locked=false, extraDays=0;
+    while(ti<trades.length && trades[ti].iIn<s) ti++;
+    const eqCurve=recordCurve?[]:null;
+    const px=(o,i,k)=> o.bars? o.bars[i][k] : bars[i][k];                       // price of the asset held
+    const close=(o,price)=> (o.side*(price-o.entry) - o.spread - (o.comm/100)*o.entry)*pv*o.lots;
+    for(let i=s;i<=e;i++){
+      const b=bars[i];
+      const dk=b.t.getUTCFullYear()+"-"+b.t.getUTCMonth()+"-"+b.t.getUTCDate();
+      if(dk!==dayKey){ dayKey=dk; dayStart=balance;
+        if(p.dailyRef==="max" && open && i>s){ const eq0=balance+open.side*(px(open,i-1,"c")-open.entry)*pv*open.lots; if(eq0>dayStart) dayStart=eq0; }   // conservative variant: equity at midnight if higher
+        dayFloor=dayStart-initial*p.daily/100; tradesToday=0; dayBlocked=false;   // daily limit: % of the INITIAL balance, measured from the start of the day
+        if(locked && !verdict){ extraDays++; if(tdays.size+extraDays>=minD){ verdict={status:"pass",date:b.t}; passIdx=i; locked=false; if(!recordCurve) dead=true; } } }
+      // 1) limits: intrabar worst case (bar low for longs, bar high for shorts)
+      if(!dead && !verdict){
+        let eqLow=balance;
+        if(open){ let w=px(open,i,open.side>0?"l":"h");
+          if(i===open.iOut && open.wb!=null) w= open.side>0? Math.max(w,open.wb) : Math.min(w,open.wb);   // on the exit bar the loss does not exceed the stop / exit price
+          eqLow=balance+open.side*(w-open.entry)*pv*open.lots; }
+        const dayGuard=dayFloor+initial*g/100;
+        if(eqLow<=totalFloor){ verdict={status:"fail",reason:"total",date:b.t}; dead=true; }
+        else if(open && g>0 && eqLow<=dayGuard){
+          // Daily guard: closes the position at (limit − g)% and stops trading that day. If the bar gaps beyond, exit at the open.
+          const pg=open.entry+open.side*((dayGuard-balance)/(pv*open.lots)), o0=px(open,i,"o");
+          const xp= open.side>0? Math.min(o0,pg) : Math.max(o0,pg);
+          balance+=close(open,xp); open=null; dayBlocked=true; guardCuts++;
+          if(balance<=totalFloor){ verdict={status:"fail",reason:"total",date:b.t}; dead=true; }
+          else if(balance<=dayFloor){ verdict={status:"fail",reason:"daily",date:b.t}; dead=true; }
+          else if(ind){   // trading resumes the next day: trades are regenerated from there
+            let j=i+1; while(j<=e){ const t=bars[j].t; if(t.getUTCFullYear()+"-"+t.getUTCMonth()+"-"+t.getUTCDate()!==dk) break; j++; }
+            trades= j<=e? genTrades(bars,ind,p,j,e) : []; ti=0; }
+        }
+        else if(eqLow<=dayFloor){ verdict={status:"fail",reason:"daily",date:b.t}; dead=true; }
+      }
+      // 2) planned exit of the trade
+      if(open && open.iOut===i){ balance+=close(open,open.exitPrice); open=null; }
+      // 3) target reached at the bar CLOSE => close everything
+      if(!dead && !verdict && !locked && open){ const eqC=balance+close(open,px(open,i,"c")); if(eqC>=target){ balance=eqC; open=null; } }
+      if(!dead && !verdict && !locked && balance>=target){
+        if(tdays.size>=minD){ verdict={status:"pass",date:b.t}; passIdx=i; if(!recordCurve) dead=true; }
+        else locked=true;   // target reached before the minimum days: profit is locked and the remaining days are completed with risk-free micro trades
+      }
+      if(recordCurve) eqCurve.push({t:b.t, eq:balance});
+      const ddP=(initial-balance)/initial*100; if(ddP>maxDDpctUsed) maxDDpctUsed=ddP;
+      // 4) new entry (even if its exit falls after the window end)
+      if(!dead && !locked && !open && !dayBlocked && tradesToday<Math.round(p.maxTrades)){
+        while(ti<trades.length && trades[ti].iIn<i) ti++;
+        if(ti<trades.length && trades[ti].iIn===i){
+          const tr=trades[ti];
+          const cf=capFrac(tr,p); if(cf<1) capped++;
+          const rm=(+p.ddCut>0 && (initial-balance)/initial*100>=+p.ddCut)? 0.5 : 1;   // streak management: half risk in drawdown
+          const base=(p.riskBase==="balance")? balance : initial;      // target risk: % of the initial (fixed) or current balance
+          const capMoney=(+p.riskCap>0)? initial*(+p.riskCap)/100 : Infinity;   // max actual risk, on the initial balance
+          let riskMoney=Math.min(base*p.risk/100*rm, capMoney);
+          let lots=riskMoney/(tr.slDist*pv)*cf;              // asset units, capped by leverage
+          const ct=+p.contract||0;
+          if(ct>0){ const st=Math.max(1e-6,+p.volStep||0.01), q=lots/ct/st;
+            let lt=(p.volRound==="floor"? Math.floor(q+1e-9) : Math.round(q))*st;                        // lot rounding
+            while(lt>0 && lt*ct*tr.slDist*pv > capMoney+1e-9) lt-=st;                                    // never above the max actual risk
+            const lmax=Math.floor(balance*(+(tr.lev!=null?tr.lev:p.leverage)||1e9)/(tr.entry*pv*ct)/st+1e-9)*st; if(lt>lmax) lt=lmax;   // margen
+            if(lt < (+p.volMin||st)-1e-9){ ti++; continue; }                                             // below the minimum lot: no trade
+            lots=lt*ct; }
+          nOpened++; tdays.add(dayKey);
+          open={side:tr.side||1, wb:(tr.wb==null?null:tr.wb), comm:(tr.comm!=null?tr.comm:p.commission), entry:tr.entry, exitPrice:tr.exitPrice, iOut:tr.iOut, lots, bars:tr.lows||null, spread:(tr.spread!=null?tr.spread:p.spread)};
+          tradesToday++; ti++;
+        }
+      }
+    }
+    // position open at the window end: marked at the close (does not count as a pass)
+    const mtm = open? balance+close(open,px(open,e,"c")) : balance;
+    if(!verdict) verdict={status:"fail",reason:"target_not_reached",date:null};
+    return {balance, mtm, eqCurve, verdict, maxDDpctUsed, passIdx, initial, capped, nOpened, guardCuts};
+  }
+  function simulate(bars,p,ind,s0,e0){
+    ind = ind || computeInd(bars,p);
+    if(s0==null) s0=0; if(e0==null) e0=bars.length-1;
+    const trades0=genTrades(bars,ind,p,s0,e0);
+    const rep=replay(bars,trades0,p,s0,e0,true,ind);
+    const trades=trades0.map(tr=>({t:tr.t, r:tradeR(tr,p), cap:capFrac(tr,p)}));
+    const tdSet=new Set(); for(let i=s0;i<=e0;i++){ const b=bars[i]; tdSet.add(b.t.getUTCFullYear()+"-"+b.t.getUTCMonth()+"-"+b.t.getUTCDate()); }
+    return {bars, s0, e0, eqCurve:rep.eqCurve, trades, trades0, verdict:rep.verdict,
+      initial:rep.initial, target:rep.initial*(1+p.target/100), totalFloor:rep.initial*(1-p.maxDD/100),
+      balance:rep.balance, net:rep.balance-rep.initial, maxDDpctUsed:rep.maxDDpctUsed,
+      ind, tradingDaysCount:tdSet.size, spanDays:(bars[e0].t-bars[s0].t)/86400000,
+      window:{from:bars[s0].t,to:bars[e0].t,n:e0-s0+1}, p};
+  }
+
+  // ---------- Ventaja estadística (edge) ----------
+  // one-sided bootstrap p-value (H0: expectancy ≤ 0): R values are centred at zero, resampled 4,000 times
+  // and we count how many simulated means reach the observed one. No normality assumed (R has fat tails).
+  function pBoot(Rs){
+    const n=Rs.length; if(n<5) return null;
+    const m=Rs.reduce((a,b)=>a+b,0)/n, c=Rs.map(x=>x-m); let seed=12345; const rnd=()=>{ seed=(seed*1664525+1013904223)>>>0; return seed/4294967296; };
+    const B=4000; let ge=0; for(let b=0;b<B;b++){ let t=0; for(let i=0;i<n;i++) t+=c[(rnd()*n)|0]; if(t/n>=m) ge++; }
+    return (ge+1)/(B+1);
+  }
+  // Annualised Sharpe from mark-to-market DAILY returns (in R, no compounding): independent of risk per trade.
+  function sharpeDaily(r){
+    const bars=r.bars, p=r.p, day={}, key=t=>t.getUTCFullYear()*10000+t.getUTCMonth()*100+t.getUTCDate();
+    for(let i=r.s0;i<=r.e0;i++){ const k=key(bars[i].t); if(day[k]==null) day[k]=0; }
+    for(const tr of (r.trades0||[])){ const arr=tr.lows||bars, sd=tr.side||1; let prev=tr.entry;
+      const sp=(tr.spread!=null?tr.spread:p.spread), cm=(tr.comm!=null?tr.comm:p.commission);
+      for(let i=tr.iIn+1;i<=tr.iOut;i++){ const px=(i<tr.iOut)? arr[i].c : tr.exitPrice; const k=key(bars[i].t);
+        if(px!=null && isFinite(px)){ day[k]=(day[k]||0)+sd*(px-prev)/tr.slDist; prev=px; } }
+      const kx=key(bars[tr.iOut].t); day[kx]=(day[kx]||0)-(sp+(cm/100)*tr.entry)/tr.slDist; }
+    const v=Object.values(day), n=v.length; if(n<30) return null;
+    const m=v.reduce((a,b)=>a+b,0)/n, sdv=Math.sqrt(v.reduce((a,b)=>a+(b-m)*(b-m),0)/(n-1));
+    return sdv>0? m/sdv*Math.sqrt(252) : null;
+  }
+  function edgeStats(r){
+    const Rs=r.trades.map(t=>t.r).filter(x=>isFinite(x));
+    const n=Rs.length;
+    if(n===0) return {n:0};
+    const mean=Rs.reduce((s,x)=>s+x,0)/n;
+    const sd=n>1? Math.sqrt(Rs.reduce((s,x)=>s+(x-mean)*(x-mean),0)/(n-1)) : 0;
+    const tStat= (sd>0&&n>1)? mean/(sd/Math.sqrt(n)) : 0;
+    const wins=Rs.filter(x=>x>0).length;
+    const winRate=wins/n*100;
+    const avgWin= wins? Rs.filter(x=>x>0).reduce((s,x)=>s+x,0)/wins : 0;
+    const nl=n-wins;
+    const avgLoss= nl? Math.abs(Rs.filter(x=>x<=0).reduce((s,x)=>s+x,0)/nl) : 0;
+    const payoff= avgLoss>0? avgWin/avgLoss : 0;
+    const expectancyR=mean;                                  // R per trade
+    const expectancyUSD=mean*(r.initial*r.p.risk/100);       // $ per trade (approx., sizing on initial balance)
+    const tradesPerMonth= r.spanDays>0? n/(r.spanDays/30) : 0;
+    // significance reading
+    let sig, sigCls;
+    if(n<30){ sig="Small sample ("+n+" trades): inconclusive"; sigCls="w"; }
+    else if(tStat>=2){ sig="Significant edge (~95% conf.)"; sigCls= mean>0?"g":"r"; }
+    else if(tStat>=1){ sig="Weak / inconclusive edge"; sigCls="w"; }
+    else { sig="No detectable statistical edge"; sigCls="r"; }
+    if(mean<=0 && n>=30){ sig="Negative expectancy: no edge"; sigCls="r"; }
+    return {n,mean,sd,tStat,winRate,payoff,expectancyR,expectancyUSD,tradesPerMonth,sig,sigCls, pval:pBoot(Rs), sharpe:sharpeDaily(r)};
+  }
+
+  // ---------- Monte Carlo (trade bootstrap) ----------
+  // Resamples historical trades (with replacement) to remove the dependence
+  // on one specific order and estimate the pass probability and drawdown distribution.
+  function monteCarlo(r, horizonDays, nRuns, blockLen){
+    const TT=r.trades.filter(t=>isFinite(t.r)); const Rs=TT.map(t=>t.r), Cs=TT.map(t=>t.cap==null?1:t.cap);
+    if(Rs.length<5) return {insufficient:true, nTrades:Rs.length};
+    const p=r.p, initial=r.initial;
+    const target=initial*(1+p.target/100);
+    const totalFloor=initial*(1-p.maxDD/100);
+    const lambda=Math.min(p.maxTrades, r.tradingDaysCount>0? r.trades.length/r.tradingDaysCount : 0); // ops/día esperadas
+    const maxT=Math.round(p.maxTrades);
+    const perTrialProb= maxT>0? lambda/maxT : 0;
+    // Stationary bootstrap (Politis-Romano): L=1 => i.i.d.; L>1 keeps streaks (blocks of mean length L).
+    const L=Math.max(1, blockLen||1); const pJump=1/L;
+    const finals=[], dds=[], passDays=[];
+    let pass=0, failTotal=0, failDaily=0, incomplete=0;
+    for(let run=0; run<nRuns; run++){
+      let balance=initial, ddUsed=0, done=false, outcome="incomplete", passDay=null, bidx=-1, tdays=0;
+      const minD=Math.max(0,Math.round(p.minDays||0));
+      for(let d=1; d<=horizonDays && !done; d++){
+        const dayStart=balance; let traded=false;
+        for(let k=0;k<maxT && !done;k++){
+          if(Math.random()>=perTrialProb) continue;
+          traded=true;
+          if(bidx<0 || Math.random()<pJump) bidx=(Math.random()*Rs.length)|0; else bidx=(bidx+1)%Rs.length;
+          const R=Rs[bidx];
+          balance += balance*(p.risk/100)*Cs[bidx]*R;
+          const dd=(initial-balance)/initial*100; if(dd>ddUsed) ddUsed=dd;
+          if(balance<=totalFloor){ outcome="total"; done=true; }
+        }
+        if(traded) tdays++;
+        if(!done){
+          if(balance <= dayStart-initial*p.daily/100){ outcome="daily"; done=true; }
+          else if(balance>=target){ const need=Math.max(0,minD-tdays); if(d+need<=horizonDays){ outcome="pass"; passDay=d+need; } done=true; }
+        }
+      }
+      finals.push((balance-initial)/initial*100);
+      dds.push(ddUsed);
+      if(outcome==="pass"){ pass++; passDays.push(passDay); }
+      else if(outcome==="total"){ failTotal++; }
+      else if(outcome==="daily"){ failDaily++; }
+      else incomplete++;
+    }
+    finals.sort((a,b)=>a-b); dds.sort((a,b)=>a-b); passDays.sort((a,b)=>a-b);
+    const q=(arr,p)=> arr.length? arr[Math.min(arr.length-1,Math.floor(p*arr.length))] : null;
+    return {
+      insufficient:false, nRuns, horizonDays, nTrades:Rs.length,
+      passRate:pass/nRuns*100, failTotalRate:failTotal/nRuns*100, failDailyRate:failDaily/nRuns*100, incompleteRate:incomplete/nRuns*100,
+      retP5:q(finals,.05), retP50:q(finals,.5), retP95:q(finals,.95),
+      ddP50:q(dds,.5), ddP95:q(dds,.95), ddWorst:dds[dds.length-1],
+      medPassDay: passDays.length? q(passDays,.5):null,
+      finals
+    };
+  }
+
+  // ---------- Walk-forward / out-of-sample ----------
+  // "Pure" edge of the strategy over [s,e]: runs continuously (no account limits,
+  // no reset) and returns the R multiple of each trade. R is invariant to sizing.
+  function edgeOfR(Rs){
+    const n=Rs.length; if(!n) return {n:0,mean:0,t:0,win:0,payoff:0};
+    const mean=Rs.reduce((s,x)=>s+x,0)/n;
+    const sd=n>1? Math.sqrt(Rs.reduce((s,x)=>s+(x-mean)*(x-mean),0)/(n-1)):0;
+    const t=(sd>0)? mean/(sd/Math.sqrt(n)) : 0;
+    const w=Rs.filter(x=>x>0).length;
+    const aw=w?Rs.filter(x=>x>0).reduce((s,x)=>s+x,0)/w:0;
+    const al=(n-w)?Math.abs(Rs.filter(x=>x<=0).reduce((s,x)=>s+x,0)/(n-w)):0;
+    return {n,mean,t,win:w/n*100,payoff:al?aw/al:0};
+  }
+  // Optimisation grid by strategy (parameters that do NOT affect the indicators).
+  function wfGrid(p){
+    if(p.strategy==="session"){ const g=[]; for(const hin of [1,5,9,13,15,20]) for(const hout of [9,13,20,22]) if(hout>hin) g.push({entryHour:hin,exitHour:hout}); return g; }
+    if(p.strategy==="meanrev"){ const g=[]; for(const h of [1,9,13,15,20]) for(const thr of [25,30,35,40]) g.push({mrHour:h,mrRsi:thr}); return g; }
+    if(p.strategy==="rotation"){ const g=[]; for(const L of [5,10,20,60]) for(const a of [true,false]) g.push({rotL:L,rotAbs:a}); return g; }
+    if(p.strategy==="trendRS"){ return [60,80,100,120,160,240].map(k=>({rsK:k})); }
+    if(p.strategy==="trendVol"){ return [[0,50],[0,35],[35,65],[0,65],[25,75]].map(([a,b])=>({volLo:a,volHi:b})); }
+    if(p.strategy==="trendCombo"){ const g=[]; for(const k of [60,80,100,120,160,240]) for(const [a,b] of [[0,50],[0,65],[25,75],[0,100]]) g.push({rsK:k,volLo:a,volHi:b}); return g; }
+    const g=[]; for(const pb of [0.5,1.0,1.5,2.0]) for(const rr of [2,2.5,3,3.5,4]) g.push({pullback:pb,rr}); return g;
+  }
+  function wfParamsText(p){
+    if(p.strategy==="session") return "entry hour × exit hour";
+    if(p.strategy==="meanrev") return "entry hour × RSI threshold";
+    if(p.strategy==="rotation") return "lookback L ∈ {5,10,20,60} days × absolute filter on/off";
+    if(p.strategy==="trendRS") return "relative-strength lookback k ∈ {60,80,100,120,160,240}";
+    if(p.strategy==="trendVol") return "volatility band (percentiles)";
+    if(p.strategy==="trendCombo") return "lookback k × volatility band (24 combinations)";
+    return "pullback×ATR ∈ {0.5,1,1.5,2} × RR ∈ {2,2.5,3,3.5,4}";
+  }
+  function wfLabel(o){ return Object.keys(o).map(k=>k+"="+o[k]).join(" "); }
+  // Anchored walk-forward: optimise the grid in-sample, evaluate out-of-sample.
+  function walkForward(bars,ind,p,nFolds,a,b){
+    const grid=wfGrid(p); if(a==null) a=0; if(b==null) b=bars.length-1;
+    const n=b-a+1, foldSize=Math.floor(n/(nFolds+1));
+    const rows=[]; let pooledOOS=[]; const isMeans=[];
+    for(let k=1;k<=nFolds;k++){
+      const isEnd=a+foldSize*k, oosEnd=Math.min(b,a+foldSize*(k+1));
+      if(oosEnd<=isEnd) break;
+      let best=null;
+      for(const g of grid){
+        const pp={...p,...g};
+        const e=edgeOfR(rOver(bars,ind,pp,a,isEnd));
+        if(e.n>=(p.trendFam?20:15) && (!best || e.mean>best.e.mean)) best={g,e};
+      }
+      if(!best){ rows.push({fold:k,skip:true}); continue; }
+      const pp={...p,...best.g};
+      const oe=edgeOfR(rOver(bars,ind,pp,isEnd,oosEnd));
+      rows.push({fold:k, best:best.g, is:best.e, oos:oe, oosTo:bars[oosEnd].t});
+      isMeans.push(best.e.mean);
+      pooledOOS=pooledOOS.concat(rOver(bars,ind,pp,isEnd,oosEnd));
+    }
+    const pooled=edgeOfR(pooledOOS);
+    const isAvg=isMeans.length? isMeans.reduce((s,x)=>s+x,0)/isMeans.length : 0;
+    const wfe= isAvg>0? pooled.mean/isAvg : 0;
+    const done=rows.filter(r=>!r.skip);
+    const posFolds=done.filter(r=>r.oos.mean>0).length;
+    return {rows,pooled,wfe,posFolds,nDone:done.length, nGrid:grid.length, pooledP:pBoot(pooledOOS), isAvgE:{mean:isAvg, t:(done.length? done.reduce((s,r)=>s+r.is.t,0)/done.length : 0)}};
+  }
+
+  // Holdout: optimise the grid ONLY on [s0,e0] and apply the selection, unchanged, to [oos, end].
+  function rollStats(bars,ind,pp,a,b){
+    const W=rolling(bars,ind,pp,ROLL_P.windowDays,ROLL_P.stepDays,a,b).windows||[]; const n=W.length;
+    const c=f=>W.filter(f).length; const d=W.filter(o=>o.daysToPass!=null).map(o=>o.daysToPass).sort((x,y)=>x-y);
+    return {n, pass:c(o=>o.status==="pass"), dd:c(o=>o.status==="fail"&&o.reason==="total"), daily:c(o=>o.status==="fail"&&o.reason==="daily"), inc:c(o=>o.status==="incomplete"), med:d.length?d[Math.floor(d.length/2)]:null};
+  }
+  function wfHoldout(L,objective){
+    const bars=L.bars, ind=L.ind, p=L.p, s0=L.s0, e0=L.e0, oos=L.oos, end=bars.length-1;
+    if(oos==null||oos<0||end-oos<50) return {noOOS:true};
+    const grid=wfGrid(p), minN=p.trendFam?20:15; let best=null; const plat={valid:0,pos:0};
+    for(const g of grid){
+      const pp={...p,...g}; const e=edgeOfR(rOver(bars,ind,pp,s0,e0)); let sc, rs=null;
+      if(objective==="edge"){ sc= e.n>=minN? e.mean : -Infinity; }
+      else { rs=rollStats(bars,ind,pp,s0,e0); sc= rs.n? (rs.pass-rs.dd-rs.daily)/rs.n : -Infinity; }
+      if(e.n>=minN){ plat.valid++; if(e.mean>0) plat.pos++; }
+      if(!best || sc>best.sc) best={g,pp,e,rs,sc};
+    }
+    const evalRow=(label,g,pp,isE,isR)=>{
+      isE=isE||edgeOfR(rOver(bars,ind,pp,s0,e0)); isR=isR||rollStats(bars,ind,pp,s0,e0);
+      const oRs=rOver(bars,ind,pp,oos,end); const oE=edgeOfR(oRs), oR=rollStats(bars,ind,pp,oos,end), oP=pBoot(oRs);
+      const rep=replay(bars,genTrades(bars,ind,pp,oos,end),pp,oos,end,false,ind);
+      const single={status:rep.verdict.status, reason:rep.verdict.reason, date:rep.verdict.date, gain:(rep.mtm-rep.initial)/rep.initial*100,
+        days: rep.verdict.date? Math.round((rep.verdict.date-bars[oos].t)/86400000) : null};
+      return {label,g,isE,isR,oE,oR,oP,single};
+    };
+    const rows=[evalRow("Selected in-sample",best.g,best.pp,best.e,best.rs)];
+    const cur={}; Object.keys(best.g).forEach(k=>cur[k]=p[k]);
+    rows.push(evalRow("Your current parameters",cur,p));
+    return {rows, plat, nGrid:grid.length, objective, from:bars[oos].t, to:bars[end].t, isFrom:bars[s0].t, isTo:bars[e0].t, oosDays:(bars[end].t-bars[oos].t)/86400000};
+  }
+
+  // ---------- Rolling-window robustness ----------
+  function idxAtOrAfter(bars,t){ let lo=0,hi=bars.length-1,ans=-1; while(lo<=hi){const m=(lo+hi)>>1; if(bars[m].t.getTime()>=t){ans=m;hi=m-1;}else lo=m+1;} return ans; }
+  function idxAtOrBefore(bars,t){ let lo=0,hi=bars.length-1,ans=-1; while(lo<=hi){const m=(lo+hi)>>1; if(bars[m].t.getTime()<=t){ans=m;lo=m+1;}else hi=m-1;} return ans; }
+  function rolling(bars,ind,p,windowDays,stepDays,s0,e0){
+    const dayMs=86400000;
+    if(s0==null) s0=0; if(e0==null) e0=bars.length-1;
+    let warmIdx=s0; while(warmIdx<=e0 && ind.atrA[warmIdx]==null) warmIdx++;
+    if(warmIdx>e0) return {windows:[],warmup:true};
+    // Rotation: each evaluation starts flat and enters at the first rebalance of its window.
+    const trades0= p.strategy==="rotation" ? null : genTrades(bars,ind,p,s0,e0);
+    const t0=bars[warmIdx].t.getTime(), tEnd=bars[e0].t.getTime();
+    const windows=[];
+    for(let startT=t0; startT+windowDays*dayMs<=tEnd+dayMs; startT+=stepDays*dayMs){
+      const si=idxAtOrAfter(bars,startT);
+      const ei=Math.min(e0, idxAtOrBefore(bars,startT+windowDays*dayMs));
+      if(si<0||ei<=si) continue;
+      const rep=replay(bars, trades0 || genTrades(bars,ind,p,si,ei), p, si, ei, false, ind);
+      const status = rep.verdict.status==="pass" ? "pass"
+                   : (rep.verdict.reason==="target_not_reached" ? "incomplete" : "fail");
+      const reason = rep.verdict.reason||null;
+      const gainPct=(rep.mtm-rep.initial)/rep.initial*100;
+      let daysToPass=null; if(status==="pass"&&rep.passIdx>=0) daysToPass=Math.round((bars[rep.passIdx].t-bars[si].t)/dayMs);
+      windows.push({start:bars[si].t, end:bars[ei].t, status, reason, gainPct, maxDDpctUsed:rep.maxDDpctUsed, daysToPass, guardCuts:rep.guardCuts});
+    }
+    return {windows,warmup:false,windowDays,stepDays};
+  }
+  function dailyReturns(eq){
+    const byDay={};
+    eq.forEach(e=>{ const k=e.t.getUTCFullYear()+"-"+e.t.getUTCMonth()+"-"+e.t.getUTCDate(); byDay[k]=e.eq; });
+    const keys=Object.keys(byDay); const vals=keys.map(k=>byDay[k]);
+    const r=[];
+    for(let i=1;i<vals.length;i++){ if(vals[i-1]>0) r.push((vals[i]-vals[i-1])/vals[i-1]); }
+    return r;
+  }
+  function aggregate(trades,mode){
+    const map={};
+    trades.forEach(t=>{
+      const k = mode==="m"? t.t.getUTCFullYear()+"-"+String(t.t.getUTCMonth()+1).padStart(2,"0")
+                          : String(t.t.getUTCFullYear());
+      map[k]=(map[k]||0)+t.pnl;
+    });
+    return Object.keys(map).sort().map(k=>({k,v:map[k]}));
+  }
+
+  // ---------- Formatting ----------
+  const money=v=> (v<0?"-":"")+"$"+Math.abs(v).toLocaleString("en-US",{maximumFractionDigits:0});
+  const money2=v=> (v<0?"-":"")+"$"+Math.abs(v).toLocaleString("en-US",{minimumFractionDigits:0,maximumFractionDigits:0});
+  const pct=v=> (v>=0?"+":"")+v.toFixed(1)+"%";
+  const dstr=d=> d? d.toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric",timeZone:"UTC"}):"—";
+
+  // ---------- Render ----------
+  function periodTag(){
+    const el=$("windowText"); if(!el||!LAST) return; let pt=document.getElementById("periodText");
+    if(!pt){ pt=document.createElement("div"); pt.id="periodText"; pt.className="mono"; pt.style.cssText="margin-top:4px;font-size:12px;color:var(--ink-muted)"; el.parentNode.appendChild(pt); }
+    const b=LAST.bars; pt.textContent="In-sample (all cards): "+dstr(b[LAST.s0].t)+" – "+dstr(b[LAST.e0].t)+" · Out-of-sample (walk-forward only): "+(LAST.oos>=0? dstr(b[LAST.oos].t)+" – "+dstr(b[b.length-1].t) : "no data after "+(P.c.oosFrom||"—"));
+  }
+  function render(r){
+    $("results").hidden=false; periodTag();
+    $("eqSummary").textContent="in-sample · "+dstr(r.window.from)+" – "+dstr(r.window.to)+" · "+r.window.n.toLocaleString("en-US")+" bars";
+    drawEquity(r);
+  }
+
+  // ---------- Canvas helpers ----------
+  function setup(cv){
+    const dpr=window.devicePixelRatio||1;
+    if(!cv.dataset.h) cv.dataset.h=cv.getAttribute("height");   // base height, captured once
+    const h=+cv.dataset.h, w=cv.clientWidth;
+    cv.style.height=h+"px";
+    cv.width=Math.round(w*dpr); cv.height=Math.round(h*dpr);
+    const ctx=cv.getContext("2d"); ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h};
+  }
+
+  function css(name){ return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+
+  function drawEquity(r){
+    const cv=$("equityChart"); const {ctx,w,h}=setup(cv);
+    ctx.clearRect(0,0,w,h);
+    const pad={l:58,r:14,t:14,b:26};
+    const data=r.eqCurve;
+    const xs=data.map(d=>d.t.getTime());
+    let ymin=Math.min(r.totalFloor, ...data.map(d=>d.eq));
+    let ymax=Math.max(r.target, ...data.map(d=>d.eq));
+    const yr=ymax-ymin||1; ymin-=yr*0.04; ymax+=yr*0.04;
+    const xmin=xs[0], xmax=xs[xs.length-1], xr=xmax-xmin||1;
+    const X=t=>pad.l+(t-xmin)/xr*(w-pad.l-pad.r);
+    const Y=v=>pad.t+(ymax-v)/(ymax-ymin)*(h-pad.t-pad.b);
+
+    // grid + y labels
+    ctx.font="11px "+css("--mono").replace(/"/g,"")+",monospace";
+    ctx.textBaseline="middle";
+    const ink=css("--ink-faint"), grid=css("--border-soft");
+    for(let g=0;g<=4;g++){
+      const val=ymin+(ymax-ymin)*g/4; const y=Y(val);
+      ctx.strokeStyle=grid; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(pad.l,y); ctx.lineTo(w-pad.r,y); ctx.stroke();
+      ctx.fillStyle=ink; ctx.textAlign="right"; ctx.fillText("$"+Math.round(val).toLocaleString("en-US"),pad.l-8,y);
+    }
+    // target & floor lines
+    line(ctx,pad.l,w-pad.r,Y(r.target),css("--good"),[5,4]);
+    line(ctx,pad.l,w-pad.r,Y(r.totalFloor),css("--bad"),[5,4]);
+    ctx.textAlign="left"; ctx.fillStyle=css("--good"); ctx.fillText("Target "+money(r.target),pad.l+4,Y(r.target)-8);
+    ctx.fillStyle=css("--bad"); ctx.fillText("Max-DD floor "+money(r.totalFloor),pad.l+4,Y(r.totalFloor)+9);
+
+    // x labels (start, mid, end)
+    ctx.fillStyle=ink; ctx.textAlign="center"; ctx.textBaseline="alphabetic";
+    [0,Math.floor(data.length/2),data.length-1].forEach(idx=>{
+      const d=data[idx]; ctx.fillText(dstr(d.t),X(d.t.getTime()),h-8);
+    });
+
+    // area + line
+    const grad=ctx.createLinearGradient(0,pad.t,0,h-pad.b);
+    grad.addColorStop(0,css("--equity-soft")); grad.addColorStop(1,"transparent");
+    ctx.beginPath();
+    data.forEach((d,i)=>{ const x=X(xs[i]),y=Y(d.eq); i?ctx.lineTo(x,y):ctx.moveTo(x,y); });
+    ctx.lineTo(X(xmax),Y(ymin)); ctx.lineTo(X(xmin),Y(ymin)); ctx.closePath(); ctx.fillStyle=grad; ctx.fill();
+    ctx.beginPath();
+    data.forEach((d,i)=>{ const x=X(xs[i]),y=Y(d.eq); i?ctx.lineTo(x,y):ctx.moveTo(x,y); });
+    ctx.strokeStyle=css("--equity"); ctx.lineWidth=2; ctx.lineJoin="round"; ctx.stroke();
+
+    // verdict marker
+    if(r.verdict.date){
+      const vx=X(r.verdict.date.getTime());
+      line(ctx,vx,vx,pad.t,r.verdict.status==="pass"?css("--good"):css("--bad"),[3,3],pad.t,h-pad.b);
+      const c=r.verdict.status==="pass"?css("--good"):css("--bad");
+      ctx.fillStyle=c; ctx.beginPath(); ctx.arc(vx,Y(r.balance),4,0,7); ctx.fill();
+    }
+
+    // hover
+    hover(cv,$("eqTip"),X,data,xs,d=>dstr(d.t)+"  "+money2(d.eq),Y,d=>d.eq);
+  }
+  function line(ctx,x1,x2,y,color,dash,y1,y2){
+    ctx.save(); ctx.setLineDash(dash||[]); ctx.strokeStyle=color; ctx.lineWidth=1.2;
+    ctx.beginPath();
+    if(y1!=null){ ctx.moveTo(x1,y1); ctx.lineTo(x1,y2); } else { ctx.moveTo(x1,y); ctx.lineTo(x2,y); }
+    ctx.stroke(); ctx.restore();
+  }
+  function drawDD(r){
+    const cv=$("ddChart"); const {ctx,w,h}=setup(cv); ctx.clearRect(0,0,w,h);
+    const pad={l:58,r:14,t:12,b:26};
+    let peak=r.initial; const dd=r.eqCurve.map(d=>{ peak=Math.max(peak,d.eq); return {t:d.t, v:-(peak-d.eq)/r.initial*100}; });
+    const xs=dd.map(d=>d.t.getTime()); const xmin=xs[0],xmax=xs[xs.length-1],xr=xmax-xmin||1;
+    let ymin=Math.min(-0.5,...dd.map(d=>d.v)); const ymax=0; ymin*=1.1;
+    const X=t=>pad.l+(t-xmin)/xr*(w-pad.l-pad.r);
+    const Y=v=>pad.t+(ymax-v)/(ymax-ymin)*(h-pad.t-pad.b);
+    ctx.font="11px monospace"; ctx.textBaseline="middle";
+    for(let g=0;g<=3;g++){ const val=ymin*g/3; const y=Y(val); ctx.strokeStyle=css("--border-soft"); ctx.beginPath(); ctx.moveTo(pad.l,y); ctx.lineTo(w-pad.r,y); ctx.stroke(); ctx.fillStyle=css("--ink-faint"); ctx.textAlign="right"; ctx.fillText(val.toFixed(1)+"%",pad.l-8,y); }
+    // DD limit line
+    line(ctx,pad.l,w-pad.r,Y(-r.p.maxDD),css("--bad"),[5,4]);
+    ctx.fillStyle=css("--bad"); ctx.textAlign="left"; ctx.fillText("Limit -"+r.p.maxDD+"%",pad.l+4,Y(-r.p.maxDD)-8);
+    const grad=ctx.createLinearGradient(0,pad.t,0,h-pad.b); grad.addColorStop(0,"transparent"); grad.addColorStop(1,css("--bad-soft"));
+    ctx.beginPath(); dd.forEach((d,i)=>{const x=X(xs[i]),y=Y(d.v); i?ctx.lineTo(x,y):ctx.moveTo(x,y);}); ctx.lineTo(X(xmax),Y(0)); ctx.lineTo(X(xmin),Y(0)); ctx.closePath(); ctx.fillStyle=grad; ctx.fill();
+    ctx.beginPath(); dd.forEach((d,i)=>{const x=X(xs[i]),y=Y(d.v); i?ctx.lineTo(x,y):ctx.moveTo(x,y);}); ctx.strokeStyle=css("--bad"); ctx.lineWidth=1.6; ctx.stroke();
+    ctx.fillStyle=css("--ink-faint"); ctx.textAlign="center"; ctx.textBaseline="alphabetic";
+    [0,dd.length-1].forEach(i=>ctx.fillText(dstr(dd[i].t),X(xs[i]),h-8));
+    hover(cv,$("ddTip"),X,dd,xs,d=>dstr(d.t)+"  "+d.v.toFixed(2)+"%",Y,d=>d.v);
+  }
+  function drawMonthly(r){
+    const cv=$("monthChart"); const {ctx,w,h}=setup(cv); ctx.clearRect(0,0,w,h);
+    const pad={l:58,r:14,t:12,b:38}; const data=r.monthly;
+    if(!data.length){ ctx.fillStyle=css("--ink-faint"); ctx.font="12px sans-serif"; ctx.textAlign="center"; ctx.fillText("No trades in the period",w/2,h/2); return; }
+    const max=Math.max(1,...data.map(d=>Math.abs(d.v)));
+    const X=i=>pad.l+(i+0.5)/data.length*(w-pad.l-pad.r);
+    const Y=v=>{ const mid=pad.t+(h-pad.t-pad.b)/2*(1); const zero=pad.t+(h-pad.t-pad.b)*0.5; return zero - v/max*(h-pad.t-pad.b)*0.46; };
+    const zero=Y(0);
+    ctx.strokeStyle=css("--border"); ctx.beginPath(); ctx.moveTo(pad.l,zero); ctx.lineTo(w-pad.r,zero); ctx.stroke();
+    ctx.font="11px monospace"; ctx.fillStyle=css("--ink-faint"); ctx.textAlign="right"; ctx.textBaseline="middle";
+    ctx.fillText(money2(max),pad.l-8,Y(max)); ctx.fillText(money2(-max),pad.l-8,Y(-max)); ctx.fillText("$0",pad.l-8,zero);
+    const bw=Math.max(4,Math.min(34,(w-pad.l-pad.r)/data.length*0.62));
+    data.forEach((d,i)=>{
+      const x=X(i), y=Y(d.v);
+      ctx.fillStyle=d.v>=0?css("--good"):css("--bad");
+      const top=Math.min(y,zero), hh=Math.abs(y-zero);
+      roundRect(ctx,x-bw/2,top,bw,Math.max(1,hh),3);
+    });
+    // x labels (sparse)
+    ctx.fillStyle=css("--ink-faint"); ctx.textAlign="center"; ctx.textBaseline="alphabetic"; ctx.save();
+    const stepL=Math.ceil(data.length/8);
+    data.forEach((d,i)=>{ if(i%stepL===0){ ctx.fillText(d.k,X(i),h-12); } });
+    ctx.restore();
+    // hover
+    const tip=$("mTip");
+    cv.onmousemove=e=>{ const rect=cv.getBoundingClientRect(); const mx=e.clientX-rect.left; let bi=Math.round((mx-pad.l)/(w-pad.l-pad.r)*data.length-0.5); bi=Math.max(0,Math.min(data.length-1,bi)); const d=data[bi]; tip.style.opacity=1; tip.style.left=X(bi)+"px"; tip.style.top=Y(Math.max(d.v,0))+"px"; tip.textContent=d.k+"  "+money2(d.v); };
+    cv.onmouseleave=()=>tip.style.opacity=0;
+  }
+  function roundRect(ctx,x,y,w,h,r){ r=Math.min(r,w/2,h/2); ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); ctx.fill(); }
+  function drawYearTable(r){
+    const t=$("yearTable");
+    let html="<thead><tr><th>Year</th><th>Result</th><th>% account</th></tr></thead><tbody>";
+    if(!r.yearly.length) html+="<tr><td colspan=3 style='text-align:center;color:var(--ink-faint)'>No data</td></tr>";
+    r.yearly.forEach(y=>{ html+="<tr><td>"+y.k+"</td><td class='"+(y.v>=0?"pos":"neg")+"'>"+money2(y.v)+"</td><td class='"+(y.v>=0?"pos":"neg")+"'>"+pct(y.v/r.initial*100)+"</td></tr>"; });
+    html+="</tbody>"; t.innerHTML=html;
+  }
+  // "Total-DD breach" fill: dark red with diagonal hatching (distinct from green by lightness and texture)
+  function ddPattern(ctx){
+    const c=document.createElement("canvas"); c.width=6; c.height=6; const g=c.getContext("2d");
+    g.fillStyle=css("--fail-dd"); g.fillRect(0,0,6,6);
+    g.strokeStyle=css("--fail-dd-line"); g.lineWidth=1.2; g.beginPath(); g.moveTo(-1,7); g.lineTo(7,-1); g.stroke();
+    return ctx.createPattern(c,"repeat");
+  }
+  const DD_SWATCH="repeating-linear-gradient(135deg,var(--fail-dd) 0 4px,var(--fail-dd-line) 4px 5px)";
+  function rollColor(o){
+    if(o.status==="pass") return css("--good");
+    if(o.status==="fail") return o.reason==="total"? css("--fail-dd") : css("--warn");
+    return css("--ink-faint");
+  }
+  function rollLabel(o){
+    if(o.status==="pass") return "Passed";
+    if(o.status==="fail") return o.reason==="total"? "Breach · total DD" : "Breach · daily loss";
+    return "Target not reached";
+  }
+  function medianStopFrac(r){ const a=(r.trades0||[]).filter(t=>t.entry>0&&t.slDist>0).map(t=>t.slDist/t.entry).sort((x,y)=>x-y); return a.length? a[Math.floor(a.length/2)] : null; }
+  function sizeX(risk,f){ const want=risk/100/f, L=+P.c.leverage||1e9; return {x:Math.min(want,L), capped:want>L, want}; }
+  function posSizeText(r,risk){ const f=medianStopFrac(r); if(!f) return ""; const z=sizeX(risk,f); return z.x.toFixed(2)+"× the account"+(z.capped?" (capped by leverage 1:"+(+P.c.leverage)+"; requested "+z.want.toFixed(2)+"×)":""); }
+  function drawRolling(rr,p){
+    const W=rr.windows;
+    const rateEl=$("rollRate"), tilesEl=$("rollTiles"), sumEl=$("rollSummary"), legEl=$("rollLegend");
+    const cv=$("rollChart"); const {ctx,w,h}=setup(cv); ctx.clearRect(0,0,w,h);
+    if(!W || W.length<2){
+      rateEl.innerHTML='<span class="lbl">More data is needed for '+ROLL_P.windowDays+'-day windows. Load a longer history (ideally 6–12 months or more).</span>';
+      tilesEl.innerHTML=""; sumEl.textContent=""; legEl.innerHTML="";
+      ctx.fillStyle=css("--ink-faint"); ctx.font="12px sans-serif"; ctx.textAlign="center"; ctx.fillText("Not enough data for the rolling-window analysis",w/2,h/2);
+      return;
+    }
+    const n=W.length;
+    const passes=W.filter(o=>o.status==="pass").length;
+    const fDaily=W.filter(o=>o.status==="fail"&&o.reason==="daily").length;
+    const fTotal=W.filter(o=>o.status==="fail"&&o.reason==="total").length;
+    const inc=W.filter(o=>o.status==="incomplete").length;
+    const rate=passes/n*100;
+    const dtp=W.filter(o=>o.daysToPass!=null).map(o=>o.daysToPass).sort((a,b)=>a-b);
+    const medDays= dtp.length? dtp[Math.floor(dtp.length/2)] : null;
+
+    const rc= rate>=60?"g": rate>=35?"w":"r";
+    const ps=LAST? posSizeText(LAST,p.risk) : "";
+    rateEl.innerHTML='<span class="big '+rc+'">'+rate.toFixed(0)+'%</span>'+
+      '<span class="lbl">of <b>'+n+'</b> simulated evaluations (one per start date, <b>'+ROLL_P.windowDays+'-day</b> window) <b>reached the target</b> before breaching a limit.'+
+      ((+p.guard>0)?'<br>Risk guard on: an account reaching <b>'+(p.maxDD-p.guard)+'%</b> drawdown counts as breached, and the position is closed when the day is <b>'+(p.daily-p.guard)+'%</b> down (happened in '+W.filter(o=>o.guardCuts>0).length+' of '+n+' windows).':'')+
+      (ps?'<br>Typical position size with this configuration: <b>'+ps+'</b> (risk '+(+p.risk).toFixed(2)+'% ÷ median stop distance '+(medianStopFrac(LAST)*100).toFixed(2)+'%).':'')+'</span>';
+
+    const tiles=[
+      {l:"Windows", v:String(n), cls:""},
+      {l:"Passed", v:passes+" ("+rate.toFixed(0)+"%)", cls:"pos"},
+      {l:"Daily breach", v:fDaily+" ("+(fDaily/n*100).toFixed(0)+"%)", cls:"neg"},
+      {l:"Total-DD breach", v:fTotal+" ("+(fTotal/n*100).toFixed(0)+"%)", cls:"dd"},
+      {l:"No target", v:inc+" ("+(inc/n*100).toFixed(0)+"%)", cls:""},
+    ];
+    tilesEl.innerHTML=tiles.map(t=>'<div class="tile"><span class="t-lbl">'+t.l+'</span><span class="t-val '+t.cls+'">'+t.v+'</span></div>').join("")
+      + '<div class="tile" style="grid-column:1/-1;flex-direction:row;justify-content:space-between;align-items:center"><span class="t-lbl">Median days to pass</span><span class="t-val">'+(medDays!=null? medDays+" days":"—")+'</span></div>';
+
+    sumEl.textContent=n+" evaluations · step "+ROLL_P.stepDays+" days";
+    legEl.innerHTML='<span><i style="background:'+css("--good")+'"></i>Passed</span>'+
+      '<span><i style="background:'+css("--warn")+'"></i>Breach · daily loss</span>'+
+      '<span><i style="background:'+DD_SWATCH+'"></i>Breach · total DD</span>'+
+      '<span><i style="background:'+css("--ink-faint")+'"></i>Target not reached</span>';
+
+    // strip chart
+    const pad={l:14,r:14,t:10,b:26};
+    const xs=W.map(o=>o.start.getTime());
+    const xmin=xs[0], xmax=xs[xs.length-1], xr=(xmax-xmin)||1;
+    const X=t=>pad.l+(t-xmin)/xr*(w-pad.l-pad.r);
+    const barW=Math.max(2,Math.min(22,(w-pad.l-pad.r)/n*0.82));
+    const top=pad.t, bot=h-pad.b;
+    const ddPat=ddPattern(ctx);
+    W.forEach((o,i)=>{
+      ctx.fillStyle=(o.status==="fail"&&o.reason==="total")? ddPat : rollColor(o);
+      const x=X(xs[i])-barW/2;
+      ctx.fillRect(x,top,barW,bot-top);
+      ctx.fillStyle=css("--bg"); ctx.fillRect(x+barW-1,top,1,bot-top); // 1px gap
+    });
+    ctx.fillStyle=css("--ink-faint"); ctx.font="11px monospace"; ctx.textAlign="center"; ctx.textBaseline="alphabetic";
+    [[0,"left"],[Math.floor(n/2),"center"],[n-1,"right"]].forEach(([i,al])=>{ ctx.textAlign=al; ctx.fillText(dstr(W[i].start), al==="left"?pad.l:(al==="right"?w-pad.r:X(xs[i])), h-8); });
+
+    const tip=$("rollTip");
+    cv.onmousemove=e=>{ const rect=cv.getBoundingClientRect(); const mx=e.clientX-rect.left;
+      let best=0,bd=Infinity; for(let i=0;i<xs.length;i++){const d=Math.abs(X(xs[i])-mx); if(d<bd){bd=d;best=i;}}
+      const o=W[best]; tip.style.opacity=1; tip.style.left=X(xs[best])+"px"; tip.style.top=(top+8)+"px";
+      tip.innerHTML="Start "+dstr(o.start)+"<br>"+rollLabel(o)+" · "+(o.gainPct>=0?"+":"")+o.gainPct.toFixed(1)+"%"+(o.daysToPass!=null?" · "+o.daysToPass+"d":"");
+    };
+    cv.onmouseleave=()=>tip.style.opacity=0;
+  }
+  function drawEdge(e){
+    const sig=$("edgeSig"), tiles=$("edgeTiles");
+    if(!e.n){ sig.innerHTML='<span class="lbl">No trades with this configuration: relax the filters or load more history.</span>'; tiles.innerHTML=""; return; }
+    sig.innerHTML='<span class="big '+e.sigCls+'">'+(e.expectancyR>=0?"+":"")+e.expectancyR.toFixed(3)+'R</span>'+
+      '<span class="lbl"><b>'+e.sig+'</b><br>Expectancy per trade · t-stat '+e.tStat.toFixed(2)+' over '+e.n+' trades'+(e.pval!=null?' · p-value '+e.pval.toFixed(3):'')+'.</span>';
+    const t=[
+      {l:"Annual Sharpe",v:e.sharpe!=null?e.sharpe.toFixed(2):"—",c:e.sharpe!=null&&e.sharpe>=1?"pos":""},
+      {l:"p-value (bootstrap)",v:e.pval!=null?e.pval.toFixed(3):"—",c:e.pval!=null&&e.pval<0.05?"pos":"neg"},
+      {l:"Trades",v:String(e.n),c:""},
+      {l:"Expectancy/trade",v:(e.expectancyUSD>=0?"+":"")+money2(e.expectancyUSD),c:e.expectancyR>=0?"pos":"neg"},
+      {l:"Win rate",v:e.winRate.toFixed(0)+"%",c:""},
+      {l:"Payoff (W/L)",v:e.payoff?e.payoff.toFixed(2):"—",c:e.payoff>=1?"pos":"neg"},
+      {l:"Trades/month",v:e.tradesPerMonth.toFixed(1),c:""},
+    ];
+    tiles.innerHTML=t.map(x=>'<div class="tile"><span class="t-lbl">'+x.l+'</span><span class="t-val '+x.c+'">'+x.v+'</span></div>').join("");
+    const nt=$("edgeNote"); if(nt) nt.innerHTML="<b>How they relate:</b> <b>R</b> is the average gain per trade (in multiples of the amount risked); the <b>t-stat</b> and <b>p-value</b> say whether that R differs from zero or could be luck (p &lt; 0.05 ≈ t &gt; 1.7); <b>Sharpe</b> is the same idea per unit of time: mean daily return ÷ its volatility, annualised (Sharpe ≈ t ÷ √years). A high R with a high p is an R you cannot trust. If you tried N configurations, require p &lt; 0.05 ÷ N. And in a rising market, a long-only strategy has positive R because of the market, not skill.";
+  }
+  function drawMC(mc){
+    const prob=$("mcProb"), tiles=$("mcTiles"), sum=$("mcSummary"), cav=$("mcCaveat");
+    const cv=$("mcChart"); const {ctx,w,h}=setup(cv); ctx.clearRect(0,0,w,h);
+    if(mc.insufficient){ prob.innerHTML='<span class="lbl">Monte Carlo needs at least 5 trades (there are '+mc.nTrades+'). Extend the history or relax the filters.</span>'; tiles.innerHTML=""; sum.textContent=""; cav.textContent=""; ctx.fillStyle=css("--ink-faint"); ctx.font="12px sans-serif"; ctx.textAlign="center"; ctx.fillText("Not enough data",w/2,h/2); return; }
+    const rc= mc.passRate>=60?"g": mc.passRate>=35?"w":"r";
+    const bstr = mc.blockLen? " · block="+mc.blockLen : " · i.i.d. (block=1)";
+    const cmp = (mc.iidPass!=null)? '<br><span style="color:var(--warn)">With block='+mc.blockLen+' (keeps streaks): pass '+mc.passRate.toFixed(0)+'% vs i.i.d. '+mc.iidPass.toFixed(0)+'% · DD p95 '+mc.ddP95.toFixed(1)+'% vs '+mc.iidDdP95.toFixed(1)+'%</span>' : '';
+    prob.innerHTML='<span class="big '+rc+'">'+mc.passRate.toFixed(0)+'%</span>'+
+      '<span class="lbl">estimated probability of <b>passing</b> within '+mc.horizonDays+' days · '+mc.nRuns.toLocaleString("en-US")+' simulations'+bstr+'.<br>Breaching the account (total DD): <b>'+mc.failTotalRate.toFixed(1)+'%</b>.'+cmp+'</span>';
+    const t=[
+      {l:"Median return (p50)",v:pct(mc.retP50),c:mc.retP50>=0?"pos":"neg"},
+      {l:"Typical bad case (p5)",v:pct(mc.retP5),c:"neg"},
+      {l:"Good case (p95)",v:pct(mc.retP95),c:"pos"},
+      {l:"Median DD",v:mc.ddP50.toFixed(1)+"%",c:""},
+      {l:"Worst-5% DD (p95)",v:mc.ddP95.toFixed(1)+"%",c:"neg"},
+      {l:"Worst DD",v:mc.ddWorst.toFixed(1)+"%",c:"neg"},
+    ];
+    tiles.innerHTML=t.map(x=>'<div class="tile"><span class="t-lbl">'+x.l+'</span><span class="t-val '+x.c+'">'+x.v+'</span></div>').join("");
+    sum.textContent=(mc.medPassDay?("Median days to pass: "+mc.medPassDay):"");
+    cav.innerHTML="<b>How to read it:</b> with <b>block length = 1</b> it is the i.i.d. bootstrap (shuffles single trades and ignores streaks → optimistic). Raise it for the <b>block bootstrap</b>: it resamples blocks of consecutive trades, keeping streaks and autocorrelation, which is closer to reality (lower pass probability, heavier drawdown tail). The gap between block=1 and a high block length measures how much the i.i.d. assumption misleads. The most useful output is still the <b>drawdown distribution</b>.";
+    drawHist(ctx,w,h,mc.finals, LAST.p.target, LAST.p.maxDD);
+  }
+  function drawHist(ctx,w,h,vals,target,maxDD){
+    const pad={l:20,r:14,t:20,b:26};
+    let min=Math.min.apply(null,vals), max=Math.max.apply(null,vals);
+    min=Math.min(min,-maxDD-1); max=Math.max(max,target+1);
+    const nb=30, bw=(max-min)/nb||1; const bins=new Array(nb).fill(0);
+    vals.forEach(v=>{ let i=Math.floor((v-min)/bw); if(i<0)i=0; if(i>=nb)i=nb-1; bins[i]++; });
+    const maxc=Math.max.apply(null,bins)||1;
+    const X=v=>pad.l+(v-min)/(max-min)*(w-pad.l-pad.r);
+    const base=h-pad.b;
+    const ddPat=ddPattern(ctx);
+    for(let i=0;i<nb;i++){ const x0=X(min+i*bw), x1=X(min+(i+1)*bw); const mid=min+(i+0.5)*bw;
+      const col= mid>=target? css("--good") : (mid<=-maxDD? ddPat : css("--ink-faint"));
+      ctx.fillStyle=col; const y=pad.t+(1-bins[i]/maxc)*(base-pad.t); ctx.fillRect(x0+1,y,Math.max(1,x1-x0-2),base-y);
+    }
+    ctx.strokeStyle=css("--border"); ctx.beginPath(); ctx.moveTo(pad.l,base); ctx.lineTo(w-pad.r,base); ctx.stroke();
+    [{v:0,c:css("--ink-faint"),l:"0%"},{v:target,c:css("--good"),l:"+"+target+"%"},{v:-maxDD,c:css("--bad"),l:"-"+maxDD+"%"}].forEach(m=>{
+      if(m.v<min||m.v>max) return; const x=X(m.v);
+      ctx.save(); ctx.setLineDash([4,3]); ctx.strokeStyle=m.c; ctx.lineWidth=1.2; ctx.beginPath(); ctx.moveTo(x,pad.t); ctx.lineTo(x,base); ctx.stroke(); ctx.restore();
+      ctx.fillStyle=m.c; ctx.font="10px monospace"; ctx.textAlign="center"; ctx.textBaseline="alphabetic"; ctx.fillText(m.l,x,12);
+    });
+    ctx.fillStyle=css("--ink-faint"); ctx.font="11px monospace"; ctx.textAlign="left"; ctx.fillText(pct(min),pad.l,h-8);
+    ctx.textAlign="right"; ctx.fillText(pct(max),w-pad.r,h-8);
+  }
+  function drawWF(wf){
+    const vEl=$("wfVerdict"), tEl=$("wfTiles"), tbl=$("wfTable"), cav=$("wfCaveat");
+    $("wfOverfit").innerHTML= wf.nDone? overfitRisk(wf.isAvgE, wf.pooled, wf.nGrid, wf.pooledP) : "";
+    if(!wf.nDone){ vEl.innerHTML='<span class="lbl">Not enough trades for the walk-forward. Load more history.</span>'; tEl.innerHTML=""; tbl.innerHTML=""; cav.textContent=""; return; }
+    const p=wf.pooled;
+    // verdict: robust if OOS mean>0, t>=2 and a majority of positive folds
+    const robust = p.mean>0 && p.t>=2 && wf.posFolds>=Math.ceil(wf.nDone/2);
+    const weak   = p.mean>0 && !robust;
+    const cls = robust?"g": weak?"w":"r";
+    const verdictTxt = robust? "Robust out-of-sample edge"
+                     : weak? "Fragile / inconclusive out-of-sample edge"
+                     : "No out-of-sample edge (overfitting)";
+    vEl.innerHTML='<span class="big '+cls+'">'+(p.mean>=0?"+":"")+p.mean.toFixed(3)+'R</span>'+
+      '<span class="lbl"><b>'+verdictTxt+'</b><br>Pooled OOS expectancy · t-stat '+p.t.toFixed(2)+' over '+p.n+' out-of-sample trades ('+wf.posFolds+'/'+wf.nDone+' positive folds).</span>';
+    const tiles=[
+      {l:"OOS expectancy",v:(p.mean>=0?"+":"")+p.mean.toFixed(3)+"R",c:p.mean>0?"pos":"neg"},
+      {l:"t-stat OOS",v:p.t.toFixed(2),c:p.t>=2?"pos":"neg"},
+      {l:"Walk-forward efficiency",v:(wf.wfe*100).toFixed(0)+"%",c:wf.wfe>=0.5?"pos":"neg"},
+    ];
+    tEl.innerHTML=tiles.map(x=>'<div class="tile"><span class="t-lbl">'+x.l+'</span><span class="t-val '+x.c+'">'+x.v+'</span></div>').join("");
+    let html="<thead><tr><th>Fold</th><th>Best IS parameters</th><th>IS exp. (t, n)</th><th>OOS exp. (t, n)</th><th>OOS to</th></tr></thead><tbody>";
+    wf.rows.forEach(r=>{
+      if(r.skip){ html+="<tr><td>"+r.fold+"</td><td colspan=4 style='color:var(--ink-faint)'>not enough data</td></tr>"; return; }
+      html+="<tr><td>"+r.fold+"</td><td style='color:var(--ink-muted)'>"+wfLabel(r.best)+"</td>"+
+        "<td class='"+(r.is.mean>0?"pos":"neg")+"'>"+(r.is.mean>=0?"+":"")+r.is.mean.toFixed(3)+"R ("+r.is.t.toFixed(1)+", "+r.is.n+")</td>"+
+        "<td class='"+(r.oos.mean>0?"pos":"neg")+"'>"+(r.oos.mean>=0?"+":"")+r.oos.mean.toFixed(3)+"R ("+r.oos.t.toFixed(1)+", "+r.oos.n+")</td>"+
+        "<td style='color:var(--ink-muted)'>"+dstr(r.oosTo)+"</td></tr>";
+    });
+    html+="</tbody>"; tbl.innerHTML=html;
+    cav.innerHTML="<b>How to read it:</b> the bar for 'worth it' is a <b>positive pooled OOS expectancy with t-stat ≥ 2</b> and a majority of positive folds. <b>Walk-forward efficiency</b> (OOS/IS) should be ≥ ~50%: if it falls far below, the in-sample performance was overfitting. Optimisation gains are in-sample; only the OOS column counts as evidence.";
+  }
+  // Overfitting-risk banner for the EDGE (R). Three tests; 2 or more failed = high risk.
+  function overfitRisk(isE,oE,nGrid,oP,ex){
+    if(isE.n<20 || oE.n<5) return '<div class="ofit mid"><b class="lvl">● NOT ASSESSABLE</b>The selected parameters trade very little ('+isE.n+' in-sample, '+oE.n+' out-of-sample): there is no statistical basis to measure the edge or its overfitting. A strategy that barely trades (e.g. buy and hold) only reflects the market\'s move.</div>';
+    const bad=[], good=[]; let f=0; const thr=Math.sqrt(2*Math.log(Math.max(2,nGrid)));
+    // --- Three tests on the edge (R): they set the banner level ---
+    if(!(isE.t>=thr)){ f++; bad.push("The in-sample edge does not beat what picking the best of "+nGrid+" combinations by chance would give: t = "+isE.t.toFixed(2)+" vs a threshold of "+thr.toFixed(2)+"."); }
+    else good.push("The in-sample edge clears the multiple-testing threshold (t = "+isE.t.toFixed(2)+" ≥ "+thr.toFixed(2)+").");
+    const wfe= isE.mean>0? oE.mean/isE.mean : 0;
+    if(!(wfe>=0.5)){ f++; bad.push("Out of sample, "+(wfe*100).toFixed(0)+"% of the in-sample R is retained ("+(oE.mean>=0?"+":"")+oE.mean.toFixed(3)+"R vs "+(isE.mean>=0?"+":"")+isE.mean.toFixed(3)+"R); healthy is ≥ 50%."); }
+    else good.push("Out of sample, "+(wfe*100).toFixed(0)+"% of the in-sample R is retained.");
+    if(!(oE.mean>0 && oP!=null && oP<=0.10)){ f++; bad.push("The out-of-sample R is not distinguishable from zero (p-value "+(oP!=null?oP.toFixed(2):"—")+")."); }
+    else good.push("The out-of-sample R is distinguishable from zero (p-value "+oP.toFixed(2)+").");
+    // --- Supporting indicators: shown, but they do not change the level ---
+    if(ex && ex.isR && ex.oR && ex.isR.n && ex.oR.n){
+      const pI=ex.isR.pass/ex.isR.n, bI=(ex.isR.dd+ex.isR.daily)/ex.isR.n, pO=ex.oR.pass/ex.oR.n, bO=(ex.oR.dd+ex.oR.daily)/ex.oR.n, pc=x=>(x*100).toFixed(0)+"%";
+      const txt="passes "+pc(pO)+" (in-sample "+pc(pI)+") and breaches "+pc(bO)+" (in-sample "+pc(bI)+")";
+      if(pO>=pI-0.15 && bO<=bI+0.05) good.push("Survival under the limits does not deteriorate out of sample: "+txt+".");
+      else bad.push("Survival under the limits deteriorates out of sample: "+txt+".");
+    }
+    if(ex && ex.plat && ex.plat.valid>=4){
+      const sh=ex.plat.pos/ex.plat.valid, t=ex.plat.pos+" of the "+ex.plat.valid+" grid combinations with enough trades have positive in-sample R";
+      if(sh>=0.75) good.push("The result does not hinge on a tuned parameter: "+t+" (a plateau, not a peak; in a rising market part of this is beta).");
+      else if(sh<0.5) bad.push("The result depends on the chosen combination: only "+t+".");
+    }
+    const lvl= f>=2? ["hi","▲ HIGH OVERFITTING RISK"] : f===1? ["mid","● MEDIUM OVERFITTING RISK"] : ["lo","✓ LOW OVERFITTING RISK"];
+    const small= oE.n<30? "<br>Only "+oE.n+" out-of-sample trades: with so few, a lower R may also be noise or a worse market period, not only overfitting." : "";
+    const sec=(title,arr,mark,cls)=> arr.length? '<div class="ofit-h">'+title+'</div><ul>'+arr.map(x=>'<li><span class="'+cls+'">'+mark+'</span> '+x+'</li>').join("")+'</ul>' : "";
+    return '<div class="ofit '+lvl[0]+'"><b class="lvl">'+lvl[1]+'</b>of the statistical edge (R).'+
+      sec("Indicators against",bad,"✗","neg")+sec("Indicators in favour",good,"✓","pos")+
+      '<div style="margin-top:8px">The level is set only by the three tests on R (multiple-testing threshold, R retained and out-of-sample p-value); the other indicators are supporting. A lower R out of sample is expected (the in-sample R is inflated by picking the best); what matters is how much it drops and whether it is still distinguishable from zero. This banner judges the <b>edge</b>, not survival under the limits.'+small+'</div></div>';
+  }
+  function drawHoldout(h){
+    const vEl=$("wfVerdict"), tEl=$("wfTiles"), tbl=$("wfTable"), cav=$("wfCaveat");
+    // If the in-sample selection equals the current parameters, show a single row and a single banner.
+    if(!h.noOOS && h.rows.length>1 && !h.merged && wfLabel(h.rows[0].g)===wfLabel(h.rows[1].g)){ h.rows=[h.rows[0]]; h.rows[0].label="Selected in-sample = your current parameters"; h.merged=true; }
+    $("wfOverfit").innerHTML= h.noOOS? "" : h.rows.map((r,k)=>'<div style="margin-top:14px;font-size:11px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--ink-faint)">'+(h.merged? "Parameters selected in-sample = your current parameters" : k? "Your current parameters":"Parameters selected in-sample")+' · '+wfLabel(r.g)+'</div>'+overfitRisk(r.isE,r.oE,h.nGrid,r.oP,{isR:r.isR,oR:r.oR,plat:h.plat})).join("");
+    if(h.noOOS){ vEl.innerHTML='<span class="lbl">No data after the out-of-sample date. Choose a date before the end of your data.</span>'; tEl.innerHTML=""; tbl.innerHTML=""; cav.textContent=""; return; }
+    const b=h.rows[0], R=b.oR, n=R.n||0, pc=x=>n? (x/n*100).toFixed(0)+"%" : "—";
+    const sg=b.single, sTxt= sg.status==="pass"? "Passed in "+sg.days+" days ("+dstr(sg.date)+")"
+      : sg.reason==="total"? "Breached · total DD ("+dstr(sg.date)+")" : sg.reason==="daily"? "Breached · daily loss ("+dstr(sg.date)+")"
+      : "Target not reached ("+(sg.gain>=0?"+":"")+sg.gain.toFixed(1)+"% at "+dstr(h.to)+")";
+    const cls= sg.status==="pass"? "g" : (sg.reason==="total"||sg.reason==="daily")? "r" : "w";
+    vEl.innerHTML='<span class="big '+cls+'">'+(sg.status==="pass"?"✓":(cls==="r"?"✕":"…"))+'</span><span class="lbl"><b>Evaluation started on '+dstr(h.from)+' with the parameters selected in-sample: '+sTxt+'.</b><br>'+
+      ROLL_P.windowDays+'-day windows inside the out-of-sample ('+dstr(h.from)+' – '+dstr(h.to)+'): '+n+' windows · pass '+pc(R.pass)+' · breach '+pc(R.dd+R.daily)+' · no target '+pc(R.inc)+'.</span>';
+    const t=[
+      {l:"OOS · pass",v:pc(R.pass),c:"pos"},
+      {l:"OOS · breach",v:pc(R.dd+R.daily),c:(R.dd+R.daily)?"neg":""},
+      {l:"OOS · edge (t)",v:(b.oE.mean>=0?"+":"")+b.oE.mean.toFixed(2)+"R ("+b.oE.t.toFixed(1)+")",c:b.oE.mean>0?"pos":"neg"},
+    ];
+    tEl.innerHTML=t.map(x=>'<div class="tile"><span class="t-lbl">'+x.l+'</span><span class="t-val '+x.c+'">'+x.v+'</span></div>').join("");
+    const rs=r=> r&&r.n? (r.pass/r.n*100).toFixed(0)+"% / "+((r.dd+r.daily)/r.n*100).toFixed(0)+"% <span style='color:var(--ink-faint)'>("+r.n+")</span>" : "—";
+    const ed=e=> e.n? "<span class='"+(e.mean>0?"pos":"neg")+"'>"+(e.mean>=0?"+":"")+e.mean.toFixed(3)+"R</span> ("+e.t.toFixed(1)+", "+e.n+")" : "—";
+    const sgl=r=>{ const g=r.single; return g.status==="pass"? "<span class='pos'>passed · "+g.days+" d</span>" : (g.reason==="total"||g.reason==="daily")? "<span class='neg'>breached · "+(g.reason==="total"?"DD":"daily")+" · "+g.days+" d</span>" : "no target ("+(g.gain>=0?"+":"")+g.gain.toFixed(1)+"%)"; };
+    let html="<thead><tr><th></th><th>Parameters</th><th>IS pass / breach</th><th>IS edge (t, n)</th><th>OOS edge (t, n) · p</th><th>OOS pass / breach</th><th>Evaluation from "+dstr(h.from)+"</th></tr></thead><tbody>";
+    h.rows.forEach(r=>{ html+="<tr><td>"+r.label+"</td><td style='color:var(--ink-muted)'>"+wfLabel(r.g)+"</td><td>"+rs(r.isR)+"</td><td>"+ed(r.isE)+"</td><td>"+ed(r.oE)+(r.oP!=null?" · p "+r.oP.toFixed(2):"")+"</td><td>"+rs(r.oR)+"</td><td>"+sgl(r)+"</td></tr>"; });
+    html+="</tbody>"; tbl.innerHTML=html;
+    const indep=Math.max(1,Math.floor(h.oosDays/ROLL_P.windowDays));
+    cav.innerHTML="<b>How to read it:</b> in-sample = "+dstr(h.isFrom)+" – "+dstr(h.isTo)+"; "+h.nGrid+" combinations were tested ("+wfParamsText(LAST.p)+") maximising "+(h.objective==="edge"?"expectancy per trade":"passes − breaches in "+ROLL_P.windowDays+"-day windows")+". Only the OOS columns are evidence. "+
+      "With "+Math.round(h.oosDays)+" out-of-sample days there are only ~"+indep+" <b>independent</b> "+ROLL_P.windowDays+"-day evaluation(s): windows overlap, so the OOS percentages carry a large margin of error. The \"your current parameters\" row is not a clean out-of-sample if you chose them after looking at the data.";
+  }
+  function clearSweep(){ const t=$("sweepTable"); if(t) t.innerHTML=""; }
+  function runSweep(){
+    if(!LAST) return;
+    const levels=[0.25,0.5,0.75,1,1.25,1.5,2,2.5,3], cur=+P.c.risk, f=medianStopFrac(LAST);
+    let html="<thead><tr><th>Risk per trade</th><th>Typical size"+((+P.c.contract>0)?" (before lot rounding)":"")+"</th><th>Pass</th><th>Breach · total DD</th><th>Breach · daily</th><th>No target</th><th>Median days</th></tr></thead><tbody>";
+    levels.forEach(rk=>{
+      const p={...LAST.p, risk:rk}; const W=rolling(LAST.bars,LAST.ind,p,ROLL_P.windowDays,ROLL_P.stepDays,LAST.s0,LAST.e0).windows||[]; const n=W.length||1;
+      const pa=W.filter(o=>o.status==="pass").length, ft=W.filter(o=>o.status==="fail"&&o.reason==="total").length, fd=W.filter(o=>o.status==="fail"&&o.reason==="daily").length, inc=W.filter(o=>o.status==="incomplete").length;
+      const d=W.filter(o=>o.daysToPass!=null).map(o=>o.daysToPass).sort((a,b)=>a-b);
+      html+="<tr"+(Math.abs(rk-cur)<1e-9?" class='cur'":"")+"><td>"+rk.toFixed(2)+"%"+(Math.abs(rk-cur)<1e-9?" · current":"")+"</td><td>"+(f?(()=>{const z=sizeX(rk,f); return z.x.toFixed(2)+"×"+(z.capped?" (cap)":"");})():"—")+"</td>"+
+        "<td class='pos'>"+(pa/n*100).toFixed(0)+"%</td><td class='neg'>"+(ft/n*100).toFixed(0)+"%</td><td class='neg'>"+(fd/n*100).toFixed(0)+"%</td><td>"+(inc/n*100).toFixed(0)+"%</td><td>"+(d.length?d[Math.floor(d.length/2)]+" d":"—")+"</td></tr>";
+    });
+    html+="</tbody>"; $("sweepTable").innerHTML=html;
+    $("sweepNote").innerHTML=ROLL_P.windowDays+"-day windows with a "+ROLL_P.stepDays+"-day step. Windows overlap: with a few years of data only a handful are truly independent, so treat differences of a few points as noise. More risk passes faster but breaches more accounts.";
+  }
+  function resetWF(){
+    const v=$("wfVerdict"); if(!v) return;
+    const p=effP(); const hold=$("wf_mode").value==="holdout";
+    v.innerHTML='<span class="lbl">Click "Run walk-forward". For this strategy it optimises in-sample: <b>'+wfParamsText(p)+'</b>'+(hold?' and applies the selection to the period from <b>'+dstr(new Date((P.c.oosFrom||"")+"T00:00:00Z"))+'</b>.':', maximising expectancy, and measures the next fold.')+'</span>';
+    $("wfTiles").innerHTML=""; $("wfTable").innerHTML=""; $("wfCaveat").textContent=""; const of=$("wfOverfit"); if(of) of.innerHTML="";
+  }
+  function resetParams(){
+    P.s[P.strategy]=Object.assign({},SMAP[P.strategy].defs);
+    buildControls(); resetWF(); run();
+  }
+
+  function hover(cv,tip,X,data,xs,label,Y,getv){
+    cv.onmousemove=e=>{
+      const rect=cv.getBoundingClientRect(); const mx=e.clientX-rect.left;
+      // nearest by x
+      let lo=0,hi=data.length-1;
+      const tx=xs[0]+(mx-58)/(cv.clientWidth-72)*(xs[xs.length-1]-xs[0]);
+      let best=0,bd=Infinity; for(let i=0;i<xs.length;i++){ const dd=Math.abs(xs[i]-tx); if(dd<bd){bd=dd;best=i;} }
+      const d=data[best];
+      tip.style.opacity=1; tip.style.left=X(xs[best])+"px"; tip.style.top=Y(getv(d))+"px"; tip.textContent=label(d);
+    };
+    cv.onmouseleave=()=>tip.style.opacity=0;
+  }
+  window.addEventListener("resize",()=>{ if(BARS||UNIV.length) run({keepSweep:true}); });
+
+  // ---------- Sample data ----------
+  function makeSample(){
+    // Synthetic index-like H1 data (~11 months) with alternating regimes:
+    // uptrends with pullbacks, ranges and downtrends.
+    // Only to show how the panel works; NOT real data.
+    const bars=[]; let price=15000; const start=Date.UTC(2024,0,2,1,0,0);
+    let seed=2468; const rnd=()=>{ seed=(seed*9301+49297)%233280; return seed/233280; };
+    let t=start;
+    const R=[
+      ["boom",520],["chop",300],["dip",240],["boom",560],["wsaw",380],
+      ["chop",300],["boom",520],["dip",220],["boom",540],["chop",320],
+      ["boom",500],["dip",240],["boom",540],["wsaw",360],["chop",300],
+      ["boom",520],["dip",220],["boom",540],["chop",300],["boom",500]
+    ];
+    const M={boom:[0.0006,0.0028], chop:[0,0.0030], dip:[-0.0012,0.0018], wsaw:[0.00015,0.0044]};
+    for(const seg of R){
+      const dk=M[seg[0]][0], vk=M[seg[0]][1];
+      for(let k=0;k<seg[1];k++){
+        const dt=new Date(t), wd=dt.getUTCDay();
+        if(wd!==0&&wd!==6){
+          const dr=price*dk, vv=price*vk;
+          const ch=(rnd()-0.5)*vv*2+dr;
+          const o=price, c=price+ch;
+          const hi=Math.max(o,c)+rnd()*vv*0.7, lo=Math.min(o,c)-rnd()*vv*0.7;
+          bars.push({t:dt,o,h:hi,l:lo,c}); price=c;
+        }
+        t+=3600*1000;
+      }
+    }
+    return bars;
+  }
+
+  // ---------- Homogeneous granularity ----------
+  // Some MT5 exports contain an older segment in a different granularity (e.g. an "M30" file whose
+  // first half-year is H1). Mixing them distorts indicators and lookbacks: trim to the homogeneous segment.
+  function homogenize(bars){
+    const gaps=[]; for(let i=Math.max(1,bars.length-3000);i<bars.length;i++){ const g=(bars[i].t-bars[i-1].t)/60000; if(g>0&&g<=240) gaps.push(g); }
+    if(gaps.length<50) return {bars,dropped:0};
+    gaps.sort((a,b)=>a-b); const dom=gaps[Math.floor(gaps.length/2)];
+    const byM={}, order=[];
+    for(let i=1;i<bars.length;i++){ const g=(bars[i].t-bars[i-1].t)/60000; if(g<=0||g>240) continue;
+      const k=bars[i].t.toISOString().slice(0,7); if(!byM[k]){byM[k]={n:0,d:0,idx:i};order.push(k);} byM[k].n++; if(g===dom) byM[k].d++; }
+    let startIdx=0;
+    for(const k of order){ if(byM[k].d/byM[k].n>0.5){ startIdx=byM[k].idx-1; break; } }
+    if(startIdx<=0) return {bars,dropped:0};
+    return {bars:bars.slice(startIdx), dropped:startIdx, cutFrom:bars[0].t, cutTo:bars[startIdx-1].t};
+  }
+
+  // ---------- Wiring ----------
+  const status=$("status");
+  function loadBars(bars,sample,meta){
+    let trimMsg="";
+    SYM = sample? "Example" : ((meta&&meta.name)||"Asset");
+    if(!sample && meta && meta.spread){ P.c.spread=+meta.spread.toPrecision(4); trimMsg+=" · Spread detected from the CSV: "+P.c.spread+"."; }
+    if(!sample){ const ac=assetClass(SYM); const d=CLASS_DEFS[ac]; P.c.leverage=d.leverage; P.c.commission=d.commission;
+      trimMsg+=" · Asset class: "+d.label+" → leverage 1:"+d.leverage+", commission "+d.commission+"% (defaults; edit them to match your broker's symbol specification)."; }
+    if(!sample){ const hz=homogenize(bars); if(hz.dropped>0){ bars=hz.bars; trimMsg+=" · ⚠ Dropped "+hz.dropped.toLocaleString("en-US")+" initial bars ("+dstr(hz.cutFrom)+" – "+dstr(hz.cutTo)+") because they had a different granularity."; } }
+    BARS=bars; isSample=sample;
+    if(!sample){   // the main asset joins the strategy-7 universe automatically
+      const cd=CLASS_DEFS[assetClass(SYM)], spU=(meta&&meta.spread)? meta.spread : bars[bars.length-1].c*0.00007;
+      const item={name:SYM,bars,spread:spU,tf:tfLabel(bars),lev:cd.leverage,comm:cd.commission,cls:cd.label};
+      const k=UNIV.findIndex(u=>u.name===SYM); if(k>=0) UNIV[k]=item; else UNIV.push(item);
+      F["u_"+SYM]={t:SYM,type:"toggle"}; if(P.s.rotation["u_"+SYM]==null) P.s.rotation["u_"+SYM]=true; ROT=null;
+      const us=$("univStatus"); if(us){ us.className="status ok"; us.style.margin="0"; us.textContent="✓ Strategy-7 universe: "+UNIV.map(u=>u.name+" "+u.tf).join(" · ")+". With a single asset it is daily trend following on that asset; add more only to rotate."; }
+      const ks=KNOWN_SPECS[SYM.toUpperCase()]; if(ks){ P.c.contract=ks.contract; P.c.volMin=ks.volMin; P.c.volStep=ks.volStep; trimMsg+=" · Known contract for "+SYM+": "+ks.contract+" per lot, step "+ks.volStep+" (lot rounding on)."; } else { P.c.contract=0; }
+    }
+    $("controlsCard").hidden=false;
+    $("chipSym").textContent=SYM; $("chipTf").textContent=tfLabel(bars);
+    buildControls(); resetWF();
+    const wt=$("windowTag"); wt.style.display="block"; wt.className="window-tag"+(sample?" sample":"");
+    const from=bars[0].t, to=bars[bars.length-1].t;
+    $("windowText").textContent=(sample?"⚠ SYNTHETIC EXAMPLE (not real data) · ":"")+SYM+" · "+tfLabel(bars)+" · "+dstr(from)+" – "+dstr(to)+" · "+bars.length.toLocaleString("en-US")+" bars"+((meta&&meta.source)?" · "+meta.source:"");
+    periodTag();
+    status.className="status ok"; status.textContent=sample?"Showing synthetic data. Load real data for a meaningful result.":"✓ Loaded: "+bars.length.toLocaleString("en-US")+" "+tfLabel(bars)+" bars."+trimMsg;
+    run();
+    $("results").scrollIntoView({behavior:"smooth",block:"nearest"});
+  }
+  function handleFile(file){
+    const reader=new FileReader();
+    reader.onload=()=>{
+      try{ const text=String(reader.result); const bars=parseCSV(text); loadBars(bars,false,{name:nameFromFile(file.name), spread:spreadFromText(text)}); }
+      catch(err){ status.className="status err"; status.textContent="✕ "+err.message; }
+    };
+    reader.onerror=()=>{ status.className="status err"; status.textContent="✕ Could not read the file."; };
+    reader.readAsText(file);
+  }
+  $("pickBtn").onclick=()=>$("file").click();
+  $("file").onchange=e=>{ if(e.target.files[0]) handleFile(e.target.files[0]); };
+  $("sampleBtn").onclick=()=>loadBars(makeSample(),true);
+  // Preloaded data: BTCUSDT hourly bars from Binance public data (data.binance.vision), UTC.
+  async function loadPreloaded(){
+    status.className="status"; status.textContent="Loading BTCUSDT H1 (Binance public data)…";
+    try{
+      const res=await fetch("data/BTCUSDT_H1.csv"); if(!res.ok) throw new Error("HTTP "+res.status);
+      const text=await res.text(); const bars=parseCSV(text);
+      loadBars(bars,false,{name:"BTCUSDT", spread:spreadFromText(text), source:"Binance public data, UTC"});
+    }catch(err){ status.className="status err"; status.textContent="✕ Could not load the preloaded data ("+err.message+"). Showing the synthetic example."; loadBars(makeSample(),true); }
+  }
+  $("btcBtn").onclick=loadPreloaded;
+  // reference loader (US30) for relative-strength filter
+  // universe loader (rotation): several CSV at once
+  function spreadFromText(text){
+    const rows=text.replace(/\r/g,"").split("\n").filter(l=>l.trim());
+    if(rows.length<10) return null;
+    const hdr=rows[0].toLowerCase().split(/\t|,|;/); const si=hdr.findIndex(h=>/spread/.test(h)), ci=hdr.findIndex(h=>/close|cierre/.test(h));
+    if(si<0||ci<0) return null;
+    const last=rows.slice(-6000).map(l=>l.split(/\t|,|;/));
+    const sp=last.map(r=>+r[si]).filter(x=>x>0).sort((a,b)=>a-b); if(!sp.length) return null;
+    const dec=((last[last.length-1][ci]||"").split(".")[1]||"").length;
+    return sp[Math.floor(sp.length/2)]/Math.pow(10,dec);
+  }
+  // Asset class from the symbol name: sets default leverage and commission (typical CFD-account values; editable).
+  const CLASS_DEFS={
+    crypto:{label:"crypto", leverage:1, commission:0.04},
+    forex:{label:"forex", leverage:100, commission:0.005},
+    index:{label:"index / other CFD", leverage:25, commission:0}
+  };
+  // Known contract specifications (MT5 index CFD). For other symbols, copy them from the symbol specification.
+  const KNOWN_SPECS={ NDX100:{contract:10, volMin:0.01, volStep:0.01} };
+  function assetClass(sym){
+    const u=String(sym||"").toUpperCase();
+    if(/BTC|ETH|XRP|LTC|SOL|ADA|DOGE|BNB|DOT|AVAX|LINK|BCH|XLM|TRX|MATIC|SHIB|CRYPTO/.test(u)) return "crypto";
+    if(/^(EUR|USD|GBP|JPY|AUD|NZD|CAD|CHF){2}$/.test(u.replace(/[^A-Z]/g,"").slice(0,6)) && u.replace(/[^A-Z]/g,"").length<=7) return "forex";
+    return "index";
+  }
+  function nameFromFile(fn){ const base=fn.replace(/\.[^.]+$/,"").split(/[\\/]/).pop(); const m=base.match(/([A-Za-z0-9.]+)_(M\d+|H\d+|D1|W1|MN1)_/); let nm=m?m[1]:base.split("_")[0]; return nm.split("-").pop(); }
+  $("univBtn").onclick=()=>$("univFile").click();
+  $("univFile").onchange=async e=>{
+    const files=[...e.target.files]; if(!files.length) return;
+    const us=$("univStatus"); us.style.margin="0";
+    try{
+      for(const f of files){
+        const text=await f.text();
+        const bars=homogenize(parseCSV(text)).bars;
+        const name=nameFromFile(f.name);
+        let spread=spreadFromText(text); if(!spread) spread=bars[bars.length-1].c*0.00007;
+        const cd=CLASS_DEFS[assetClass(name)];
+        const item={name,bars,spread,tf:tfLabel(bars),lev:cd.leverage,comm:cd.commission,cls:cd.label};
+        const k=UNIV.findIndex(u=>u.name===name); if(k>=0) UNIV[k]=item; else UNIV.push(item);
+        F["u_"+name]={t:name,type:"toggle"}; if(P.s.rotation["u_"+name]==null) P.s.rotation["u_"+name]=true;
+      }
+      ROT=null;
+      us.className="status ok"; us.textContent="✓ Universe: "+UNIV.map(u=>u.name+" "+u.tf).join(" · ")+". Choose strategy 7.";
+      if(SYM==="—"||SYM==="Example"){ $("chipSym").textContent=UNIV.map(u=>u.name).join(" · "); $("chipTf").textContent=UNIV[0].tf; }
+      $("controlsCard").hidden=false; buildControls(); resetWF(); run();
+    }catch(err){ us.className="status err"; us.textContent="✕ "+err.message; }
+    e.target.value="";
+  };
+  $("refBtn").onclick=()=>$("refFile").click();
+  $("refFile").onchange=e=>{ const f=e.target.files[0]; if(!f) return;
+    const rd=new FileReader();
+    rd.onload=()=>{ try{
+        const rb=homogenize(parseCSV(String(rd.result))).bars; const m=new Map(); rb.forEach(x=>m.set(x.t.getTime(), x.c));
+        REF=m; REFname=nameFromFile(f.name); REFbars=rb; updateNote();
+        $("refStatus").className="status ok"; $("refStatus").style.margin="0";
+        $("refStatus").textContent="✓ Reference loaded: "+rb.length.toLocaleString("en-US")+" bars. Choose strategy 2 or 4.";
+        if(BARS) run();
+      }catch(err){ $("refStatus").className="status err"; $("refStatus").style.margin="0"; $("refStatus").textContent="✕ "+err.message; }
+    };
+    rd.readAsText(f);
+  };
+  // rolling-window controls (recompute only the robustness section)
+  $("rw_win").addEventListener("input",e=>{ ROLL_P.windowDays=+e.target.value; $("v_win").textContent=ROLL_P.windowDays+" days"; renderRolling(); });
+  $("rw_step").addEventListener("input",e=>{ ROLL_P.stepDays=+e.target.value; $("v_step").textContent=ROLL_P.stepDays+" days"; renderRolling(); });
+  $("mc_hor").addEventListener("input",e=>{ MC_P.horizonDays=+e.target.value; $("v_mchor").textContent=MC_P.horizonDays+" days"; renderMC(); });
+  $("mc_n").addEventListener("input",e=>{ MC_P.nRuns=+e.target.value; $("v_mcn").textContent=(+e.target.value).toLocaleString("en-US"); renderMC(); });
+  $("mc_block").addEventListener("input",e=>{ MC_P.blockLen=+e.target.value; $("v_mcblock").textContent=(MC_P.blockLen===1?"1 (i.i.d.)":MC_P.blockLen+" ops"); renderMC(); });
+  $("resetBtn").addEventListener("click",resetParams);
+  $("sweepBtn").addEventListener("click",()=>{ $("sweepNote").textContent="Computing…"; setTimeout(runSweep,30); });
+  $("wf_folds").addEventListener("input",e=>{ $("v_wffolds").textContent=e.target.value; });
+  $("wf_mode").addEventListener("change",()=>{ const h=$("wf_mode").value==="holdout"; $("wf_dateWrap").hidden=!h; $("wf_objWrap").hidden=!h; $("wf_foldsWrap").hidden=h; resetWF(); });
+  $("wf_oos").addEventListener("change",e=>{ if(e.target.value){ P.c.oosFrom=e.target.value; resetWF(); run(); } });
+  $("wf_obj").addEventListener("change",resetWF);
+  $("wfRun").addEventListener("click",()=>{
+    if(!LAST) return;
+    $("wfVerdict").innerHTML='<span class="lbl">Running walk-forward…</span>';
+    setTimeout(()=>{
+      if($("wf_mode").value==="holdout") drawHoldout(wfHoldout(LAST, $("wf_obj").value));
+      else drawWF(walkForward(LAST.bars, LAST.ind, LAST.p, +$("wf_folds").value, LAST.s0, LAST.bars.length-1));
+    },30);
+  });
+  const drop=$("drop");
+  ["dragenter","dragover"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add("drag");}));
+  ["dragleave","drop"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove("drag");}));
+  drop.addEventListener("drop",e=>{ const f=e.dataTransfer.files[0]; if(f) handleFile(f); });
+
+  // open with the preloaded BTC data so the page shows results immediately
+  loadPreloaded();
+})();
+</script>
+</body>
+</html>
